@@ -12,10 +12,10 @@ const DEFAULTS = {
   notifyMode: 'tag',                // 'tag' = chỉ khi được tag | 'all' = mọi tin | 'off' = tắt
   tagKeywords: ['nhắc đến bạn', 'đã nhắc bạn'],
   priorityNames: [],                // Người / nhóm luôn được báo
-  hidePreview: false,
+  hidePreview: true,                  // don't show private content on screen by default,
   muted: false,
   pinChat: false,
-  autoStart: true,
+  autoStart: false,                    // user must explicitly enable Windows startup,
   hotkeyCapture: 'Control+Alt+S',
   hotkeyToggle: 'Control+Alt+Z',
   hotkeyExcel: 'Control+Alt+E',
@@ -26,7 +26,7 @@ const DEFAULTS = {
   bubbleShape: 'circle',            // 'circle' = cắt tròn | 'free' = giữ nguyên hình, nền trong suốt
   bubbleRemoveBg: false,            // tự xóa nền trắng / một màu liền mép ảnh (khi giữ nguyên hình)
   bubbleSize: 60,                   // cỡ hình bong bóng chính (40–160 px)
-  groupBubbles: true,               // Bong bóng cho từng nhóm có tag bạn
+  groupBubbles: true,               // Bong bóng cho từng nhóm có tin nhắn mới
   peopleBubbles: true,              // Bong bóng cho từng người nhắn riêng
   useAvatars: true,                 // Hiện ảnh đại diện lấy từ thông báo Zalo
   mainOpensHome: true,              // Bấm bong bóng chính -> về trang chủ Zalo
