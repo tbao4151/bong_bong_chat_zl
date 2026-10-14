@@ -22,20 +22,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Resolve dependencies (temporary until lockfile is committed)
+      - name: Install exact locked dependencies
         shell: pwsh
-        run: npm install --package-lock-only --ignore-scripts
-      # Temporary diagnostic step: export the generated lockfile so it can be
-      # reviewed and committed, then removed from this workflow.
-      - name: Export lockfile for reproducible release
-        shell: pwsh
-        run: |
-          Write-Output 'LOCKFILE_BEGIN'
-          [Console]::WriteLine([Convert]::ToBase64String([IO.File]::ReadAllBytes('package-lock.json')))
-          Write-Output 'LOCKFILE_END'
-      - name: Install locked dependencies
-        shell: pwsh
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Test security policy and chat inbox
         shell: pwsh
         run: npm test
