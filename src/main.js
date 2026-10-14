@@ -4,15 +4,13 @@
  * - Bong bóng kéo thả, tự hút mép, số tin chưa đọc
  * - Bấm để bung khung chat (bên trong là Zalo Web)
  * - Chỉ báo khi được @tag tên (hoặc người/nhóm ưu tiên)
- * - Chụp màn hình nhanh (Ctrl+Alt+S) rồi dán thẳng vào khung chat
+ * - Chỉ mở hội thoại Zalo, không có quyền chụp màn hình hoặc đọc clipboard
  * - Hộp "Tin nhắc tên tôi": danh sách các lần được tag, bấm để mở đúng hội thoại
- * - Bảng vẽ ghi chú lên ảnh trước khi gửi (mũi tên, khung, khoanh, bút, chữ)
- * - Gửi vùng Excel vừa copy thành ảnh (Ctrl+Alt+E)
  * - Bong bóng riêng cho từng nhóm chat vừa @tag bạn và từng người nhắn riêng
  */
 const {
   app, BrowserWindow, WebContentsView, ipcMain, screen, Menu, Tray, Notification,
-  globalShortcut, desktopCapturer, clipboard, session, shell, nativeImage, dialog
+  globalShortcut, session, shell, nativeImage, dialog
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -40,9 +38,9 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 
 let settings = null;
-let bubbleWin = null, chatWin = null, zaloView = null, captureWin = null, settingsWin = null, mentionsWin = null, editorWin = null, stackWin = null, tray = null;
+let bubbleWin = null, chatWin = null, zaloView = null, settingsWin = null, mentionsWin = null, stackWin = null, tray = null;
 let unread = 0, alerting = false, chatOpen = false, capturing = false;
-let dragOffset = null, captureImage = null, captureDisplay = null;
+let dragOffset = null;
 app.isQuitting = false;
 
 const uiPrefs = () => ({
@@ -429,7 +427,6 @@ function onChatBlur() {
 const fromShell = (e) => chatWin && e.sender === chatWin.webContents;
 ipcMain.on('shell:min', (e) => { if (fromShell(e)) hideChat(); });
 ipcMain.on('shell:pin', (e) => { if (!fromShell(e)) return; settings.pinChat = !settings.pinChat; cfg.save(settings); pushState(); });
-ipcMain.on('shell:capture', (e) => { if (fromShell(e)) setTimeout(startCapture, 120); });
 ipcMain.on('shell:reload', (e) => { if (fromShell(e) && zaloView) zaloView.webContents.reload(); });
 ipcMain.on('shell:menu', (e) => { if (fromShell(e)) buildMenu().popup({ window: chatWin }); });
 ipcMain.on('shell:expand', (e) => { if (fromShell(e)) openZaloPc(); });
@@ -890,197 +887,6 @@ ipcMain.on('stack:open', (e, key) => { if (fromStack(e)) openBubble(String(key |
 ipcMain.on('stack:menu', (e, key) => { if (fromStack(e)) bubbleMenu(String(key || '')).popup({ window: bubbleWin }); });
 ipcMain.on('stack:close-all', (e) => { if (fromStack(e)) dismissAllBubbles(); });
 
-/* ---------------- Chụp màn hình nhanh ---------------- */
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function startCapture() {
-  if (capturing) return;
-  capturing = true;
-  if (chatWin) chatWin.hide();
-  if (bubbleWin) bubbleWin.hide();
-  if (stackWin) stackWin.hide();
-  await sleep(250);
-  try {
-    const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const sf = d.scaleFactor || 1;
-    const size = { width: Math.round(d.bounds.width * sf), height: Math.round(d.bounds.height * sf) };
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
-    const src = sources.find((s) => String(s.display_id) === String(d.id)) || sources[0];
-    if (!src || src.thumbnail.isEmpty()) throw new Error('no-source');
-    captureImage = src.thumbnail;
-    captureDisplay = d;
-
-    captureWin = new BrowserWindow({
-      x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height,
-      frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
-      fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, enableLargerThanScreen: true,
-      show: false, backgroundColor: '#000000', webPreferences: uiPrefs()
-    });
-    captureWin.setAlwaysOnTop(true, 'screen-saver');
-    captureWin.loadFile(path.join(UI, 'capture.html'));
-    captureWin.webContents.once('did-finish-load', () => {
-      const jpg = 'data:image/jpeg;base64,' + captureImage.toJPEG(90).toString('base64');
-      captureWin.webContents.send('capture:image', jpg);
-    });
-    captureWin.once('ready-to-show', () => {
-      captureWin.setBounds(d.bounds);
-      captureWin.show();
-      captureWin.focus();
-    });
-    captureWin.on('closed', () => { captureWin = null; if (capturing) finishCapture(false); });
-  } catch (err) {
-    finishCapture(false);
-  }
-}
-
-ipcMain.on('capture:done', (e, r) => {
-  if (!captureWin || e.sender !== captureWin.webContents || !captureImage || !captureDisplay) return finishCapture(false);
-  const ratio = captureImage.getSize().width / captureDisplay.bounds.width;
-  const img = captureImage.getSize();
-  const rect = {
-    x: Math.max(0, Math.round(r.x * ratio)),
-    y: Math.max(0, Math.round(r.y * ratio)),
-    width: Math.round(r.w * ratio),
-    height: Math.round(r.h * ratio)
-  };
-  rect.width = Math.min(rect.width, img.width - rect.x);
-  rect.height = Math.min(rect.height, img.height - rect.y);
-  if (rect.width < 4 || rect.height < 4) return finishCapture(false);
-  const cropped = captureImage.crop(rect);
-  const sf = captureDisplay.scaleFactor || 1;
-  finishCapture(false);
-  openEditor(cropped, sf, 'Ảnh chụp màn hình');
-});
-
-ipcMain.on('capture:cancel', (e) => { if (captureWin && e.sender === captureWin.webContents) finishCapture(false); });
-
-function finishCapture() {
-  if (!capturing) return;
-  capturing = false;
-  if (captureWin && !captureWin.isDestroyed()) captureWin.close();
-  captureImage = null;
-  captureDisplay = null;
-  if (bubbleWin) bubbleWin.showInactive();
-  updateStack();
-}
-
-// Dán ảnh đang có trong bộ nhớ tạm vào khung chat
-function pasteImageToChat() {
-  openChat();
-  setTimeout(() => {
-    zaloView.webContents.focus();
-    zaloView.webContents.paste();
-    toast('Ảnh đã được dán. Nếu chưa thấy, mở đúng hội thoại rồi nhấn Ctrl+V.', 6000);
-  }, 400);
-}
-
-/* ---------------- Bảng vẽ ghi chú ---------------- */
-
-let editorImage = null;
-
-function openEditor(img, scaleFactor, label) {
-  if (!img || img.isEmpty()) return;
-  if (editorWin && !editorWin.isDestroyed()) editorWin.close();
-  editorImage = { url: img.toDataURL(), label: label || 'Ảnh' };
-  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const wa = d.workArea;
-  const size = img.getSize();
-  const sf = scaleFactor || d.scaleFactor || 1;
-  const TOOLBAR = 112;
-  const w = Math.round(Math.min(wa.width * 0.9, Math.max(720, size.width / sf + 48)));
-  const h = Math.round(Math.min(wa.height * 0.9, Math.max(460, size.height / sf + TOOLBAR + 48)));
-  editorWin = new BrowserWindow({
-    x: Math.round(wa.x + (wa.width - w) / 2), y: Math.round(wa.y + (wa.height - h) / 2), width: w, height: h,
-    minWidth: 640, minHeight: 400, title: 'Ghi chú lên ảnh – Zalo Bong Bóng', alwaysOnTop: true,
-    autoHideMenuBar: true, backgroundColor: '#2B343B', show: false,
-    icon: path.join(ASSETS, 'icon.png'), webPreferences: uiPrefs()
-  });
-  editorWin.setMenu(null);
-  editorWin.loadFile(path.join(UI, 'editor.html'));
-  editorWin.webContents.once('did-finish-load', () => {
-    if (editorWin && editorImage) editorWin.webContents.send('editor:image', editorImage);
-  });
-  editorWin.once('ready-to-show', () => { editorWin.show(); editorWin.focus(); });
-  editorWin.on('closed', () => { editorWin = null; editorImage = null; });
-}
-
-const fromEditor = (e) => editorWin && !editorWin.isDestroyed() && e.sender === editorWin.webContents;
-
-function imageFromEditor(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) return null;
-  const img = nativeImage.createFromDataURL(dataUrl);
-  return img.isEmpty() ? null : img;
-}
-
-ipcMain.on('editor:send', (e, dataUrl) => {
-  if (!fromEditor(e)) return;
-  const img = imageFromEditor(dataUrl);
-  if (!img) return;
-  clipboard.writeImage(img);
-  editorWin.close();
-  pasteImageToChat();
-});
-ipcMain.on('editor:copy', (e, dataUrl) => {
-  if (!fromEditor(e)) return;
-  const img = imageFromEditor(dataUrl);
-  if (!img) return;
-  clipboard.writeImage(img);
-  editorWin.close();
-});
-ipcMain.on('editor:cancel', (e) => { if (fromEditor(e)) editorWin.close(); });
-
-/* ---------------- Gửi vùng Excel vừa copy thành ảnh ---------------- */
-
-// Excel thường đặt sẵn ảnh của vùng copy vào bộ nhớ tạm. Nếu không có, vẽ lại bảng từ HTML.
-async function htmlTableToImage(html) {
-  html = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, '');
-  const page = '<!doctype html><html><head><meta charset="utf-8">' +
-    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">' +
-    '<style>html,body{margin:0;background:#fff}#w{display:inline-block;padding:8px;font-family:Calibri,Arial,sans-serif}' +
-    'table{border-collapse:collapse}td,th{border:1px solid #BFBFBF}</style></head><body><div id="w">' + html + '</div></body></html>';
-  const win = new BrowserWindow({
-    show: false, width: 1600, height: 1200, useContentSize: true,
-    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false }
-  });
-  try {
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page));
-    const r = await win.webContents.executeJavaScript(
-      '(() => { const b = document.getElementById("w").getBoundingClientRect(); return { w: Math.ceil(b.width), h: Math.ceil(b.height) }; })()');
-    const w = Math.min(Math.max(r.w, 20), 4000), h = Math.min(Math.max(r.h, 20), 4000);
-    win.setContentSize(w, h);
-    await sleep(300);
-    const img = await win.webContents.capturePage({ x: 0, y: 0, width: w, height: h });
-    return img.isEmpty() ? null : img;
-  } catch (e) {
-    return null;
-  } finally {
-    if (!win.isDestroyed()) win.destroy();
-  }
-}
-
-async function sendExcelRange() {
-  let img = clipboard.readImage();
-  if (img.isEmpty()) {
-    const html = clipboard.readHTML();
-    if (/<table/i.test(html)) img = await htmlTableToImage(html);
-  }
-  if (!img || img.isEmpty()) {
-    dialog.showMessageBox({
-      type: 'info', title: 'Gửi vùng Excel',
-      message: 'Chưa có vùng Excel nào được copy.',
-      detail: 'Bôi đen vùng cần gửi trong Excel, nhấn Ctrl+C, rồi bấm lại nút này (hoặc ' +
-        (prettyKey(settings.hotkeyExcel) || 'phím tắt') + ').',
-      buttons: ['Đã hiểu'], noLink: true
-    });
-    return;
-  }
-  hideChat();
-  openEditor(img, 1, 'Vùng Excel');
-}
-
-ipcMain.on('shell:excel', (e) => { if (fromShell(e)) sendExcelRange(); });
-
 /* ---------------- Menu, khay hệ thống, phím tắt ---------------- */
 
 function prettyKey(acc) { return String(acc || '').replace(/Control/g, 'Ctrl').replace(/CommandOrControl/g, 'Ctrl'); }
@@ -1092,8 +898,6 @@ function buildMenu() {
     { label: chatOpen ? 'Thu gọn khung chat' : 'Mở khung chat', click: toggleChat },
     { label: 'Tin nhắc tên tôi' + (mentions.unseenCount() ? '   (' + mentions.unseenCount() + ' chưa xem)' : ''), click: () => setTimeout(openMentions, 120) },
     { label: 'Mở rộng: mở ứng dụng Zalo PC', click: () => openZaloPc() },
-    { label: 'Gửi vùng Excel vừa copy' + (settings.hotkeyExcel ? '   (' + prettyKey(settings.hotkeyExcel) + ')' : ''), click: () => sendExcelRange() },
-    { label: 'Chụp màn hình nhanh' + (settings.hotkeyCapture ? '   (' + prettyKey(settings.hotkeyCapture) + ')' : ''), click: () => setTimeout(startCapture, 150) },
     { type: 'separator' },
     {
       label: 'Thông báo', submenu: [
@@ -1152,9 +956,7 @@ function registerHotkeys() {
     try { ok = globalShortcut.register(acc, fn); } catch (e) { ok = false; }
     if (!ok) errors.push(label + ' (' + prettyKey(acc) + ')');
   };
-  reg(settings.hotkeyCapture, () => startCapture(), 'Chụp màn hình');
   reg(settings.hotkeyToggle, () => mainBubbleToggle(), 'Mở/thu khung chat');
-  reg(settings.hotkeyExcel, () => sendExcelRange(), 'Gửi vùng Excel');
   return errors;
 }
 
@@ -1167,7 +969,7 @@ function applyAutoStart() {
 function pushState() {
   const state = {
     unread, alerting, open: chatOpen, muted: settings.muted, mode: settings.notifyMode,
-    pinned: settings.pinChat, captureKey: prettyKey(settings.hotkeyCapture), excelKey: prettyKey(settings.hotkeyExcel),
+    pinned: settings.pinChat,
     mentions: mentions.unseenCount()
   };
   if (mentionsWin && !mentionsWin.isDestroyed()) mentionsWin.webContents.send('mentions:changed');
@@ -1203,9 +1005,7 @@ ipcMain.handle('settings:get', (e) => {
   muted: settings.muted,
   pinChat: settings.pinChat,
   autoStart: settings.autoStart,
-  hotkeyCapture: settings.hotkeyCapture,
   hotkeyToggle: settings.hotkeyToggle,
-  hotkeyExcel: settings.hotkeyExcel,
   bubbleStyle: settings.bubbleStyle,
   bubblePreset: settings.bubblePreset,
   bubbleAnimate: settings.bubbleAnimate,
@@ -1237,10 +1037,8 @@ ipcMain.handle('settings:save', (e, s) => {
   settings.muted = !!s.muted;
   settings.pinChat = !!s.pinChat;
   settings.autoStart = !!s.autoStart;
-  settings.hotkeyCapture = String(s.hotkeyCapture || '').trim().slice(0, 40);
   settings.hotkeyToggle = String(s.hotkeyToggle || '').trim().slice(0, 40);
   settings.zaloPcPath = String(s.zaloPcPath || '').trim().slice(0, 500);
-  settings.hotkeyExcel = String(s.hotkeyExcel || '').trim().slice(0, 40);
   settings.bubbleStyle = ['logo', 'classic', 'preset', 'custom'].includes(s.bubbleStyle) ? s.bubbleStyle : 'logo';
   settings.bubblePreset = PRESETS.some((p) => p.id === s.bubblePreset) ? s.bubblePreset : '';
   settings.bubbleImagePath = String(s.bubbleImagePath || '').trim().slice(0, 500);
