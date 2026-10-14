@@ -21,7 +21,11 @@ const security = require('./security');
 const icons = require('./icons');
 const navigate = require('./navigate');
 
-const APP_ID = 'vn.bachtung.zalobongbong';
+const APP_ID = 'vn.bachtung.zalobongbong.secure';
+// Isolated profile: do not reuse cookies/settings from the original unreviewed app.
+// Keep this path stable between future security releases.
+app.setPath('userData', path.join(app.getPath('appData'), 'Zalo Bong Bong Secure'));
+
 const ZALO_URL = 'https://chat.zalo.me/';
 const ZALO_HOST = /^https:\/\/([a-z0-9-]+\.)*zalo\.me(\/|$)/i;
 const BUBBLE_PAD = 18;  // chừa chỗ quanh hình cho số đỏ, chấm @ và viền nhấp nháy
