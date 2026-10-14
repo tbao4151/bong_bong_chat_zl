@@ -342,13 +342,33 @@ function createChat() {
   const wc = zaloView.webContents;
   wc.on('page-title-updated', (_e, title) => updateUnread(title));
   wc.setWindowOpenHandler(({ url }) => {
-    if (security.isSafeExternalUrl(url)) shell.openExternal(url);
+    // Never pass untrusted links to the operating system without approval.
+    void confirmExternalLink(url);
     return { action: 'deny' };
   });
   wc.on('will-navigate', (e, url) => {
-    if (!ZALO_HOST.test(url)) { e.preventDefault(); if (security.isSafeExternalUrl(url)) shell.openExternal(url); }
+    if (!ZALO_HOST.test(url)) {
+      e.preventDefault();
+      void confirmExternalLink(url);
+    }
   });
   wc.loadURL(ZALO_URL);
+}
+
+async function confirmExternalLink(url) {
+  if (!security.isSafeExternalUrl(url)) return;
+  const hostname = new URL(url).hostname;
+  const { response } = await dialog.showMessageBox(chatWin, {
+    type: 'question',
+    title: 'Mở liên kết bên ngoài',
+    message: 'Mở website bên ngoài Zalo?',
+    detail: 'Tên miền: ' + hostname + '\\nChỉ tiếp tục nếu bạn tin tưởng liên kết này.',
+    buttons: ['Hủy', 'Mở bằng trình duyệt'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  });
+  if (response === 1) await shell.openExternal(url);
 }
 
 function layoutZalo() {
