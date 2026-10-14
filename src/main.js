@@ -540,7 +540,7 @@ function isPriority(text) {
 }
 
 ipcMain.on('zalo:notify', (e, d) => {
-  if (!zaloView || e.sender !== zaloView.webContents) return;
+  if (!zaloView || e.sender !== zaloView.webContents || !security.isZaloOrigin(e.sender.getURL())) return;
   handleZaloNotification(String((d && d.title) || ''), String((d && d.body) || ''), String((d && d.nid) || ''), String((d && d.icon) || ''));
 });
 
@@ -580,7 +580,7 @@ function rememberIcon(key, src) {
 }
 
 ipcMain.on('zalo:icon', (e, d) => {
-  if (!zaloView || e.sender !== zaloView.webContents || !d) return;
+  if (!zaloView || e.sender !== zaloView.webContents || !security.isZaloOrigin(e.sender.getURL()) || !d) return;
   const key = nidKey.get(String(d.nid || ''));
   if (key) rememberIcon(key, String(d.data || ''));
 });
@@ -703,7 +703,8 @@ const fromMentions = (e) => mentionsWin && !mentionsWin.isDestroyed() && e.sende
 
 ipcMain.handle('mentions:list', (e) => {
   if (!mentionsWin || e.sender !== mentionsWin.webContents) throw new Error('forbidden');
-  return { items: mentions.list(), hasName: !!settings.myName };
+  const items = mentions.list().map((m) => settings.hidePreview ? { ...m, text: '' } : m);
+  return { items, hasName: !!settings.myName };
 });
 ipcMain.on('mentions:open', (e, id) => {
   if (!fromMentions(e)) return;
@@ -1101,7 +1102,7 @@ function buildMenu() {
         { label: 'Tắt thông báo', type: 'radio', checked: settings.notifyMode === 'off', click: () => setMode('off') }
       ]
     },
-    { label: 'Bong bóng nhóm được tag', type: 'checkbox', checked: !!settings.groupBubbles, click: (i) => setBubbleKind('g', i.checked) },
+    { label: 'Bong bóng cho mọi tin nhóm', type: 'checkbox', checked: !!settings.groupBubbles, click: (i) => setBubbleKind('g', i.checked) },
     {
       label: 'Kích thước bong bóng', submenu: [
         { label: 'Nhỏ', type: 'radio', checked: bubbleSize() <= 52, click: () => setBubbleSize(48) },
