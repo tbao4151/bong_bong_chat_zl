@@ -81,10 +81,6 @@
 
   <section>
     <h2>Phím tắt</h2>
-    <label class="field" for="hotkeyCapture">Chụp màn hình nhanh</label>
-    <input type="text" id="hotkeyCapture" class="key" readonly>
-    <label class="field" for="hotkeyExcel">Gửi vùng Excel vừa copy</label>
-    <input type="text" id="hotkeyExcel" class="key" readonly>
     <label class="field" for="hotkeyToggle">Mở / thu khung chat</label>
     <input type="text" id="hotkeyToggle" class="key" readonly>
     <p class="help">Bấm vào ô rồi nhấn tổ hợp phím mới (phải có Ctrl, Alt hoặc Shift). Nhấn Delete để bỏ phím tắt.</p>
@@ -184,9 +180,7 @@
       input.value = parts.join('+');
     });
   }
-  recorder($('hotkeyCapture'));
   recorder($('hotkeyToggle'));
-  recorder($('hotkeyExcel'));
 
   // ----- Thư viện hình bong bóng -----
   let choice = { style: 'logo', preset: '' };
@@ -234,9 +228,7 @@
     $('muted').checked = !!s.muted;
     $('pinChat').checked = !!s.pinChat;
     $('autoStart').checked = !!s.autoStart;
-    $('hotkeyCapture').value = s.hotkeyCapture || '';
     $('hotkeyToggle').value = s.hotkeyToggle || '';
-    $('hotkeyExcel').value = s.hotkeyExcel || '';
     $('zaloPcPath').value = s.zaloPcPath || '';
     $('bubbleImagePath').value = s.bubbleImagePath || '';
     $('groupBubbles').checked = s.groupBubbles !== false;
@@ -269,9 +261,7 @@
       muted: $('muted').checked,
       pinChat: $('pinChat').checked,
       autoStart: $('autoStart').checked,
-      hotkeyCapture: $('hotkeyCapture').value,
       hotkeyToggle: $('hotkeyToggle').value,
-      hotkeyExcel: $('hotkeyExcel').value,
       zaloPcPath: $('zaloPcPath').value,
       bubbleStyle: choice.style,
       bubblePreset: choice.preset,
