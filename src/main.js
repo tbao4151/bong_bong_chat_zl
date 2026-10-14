@@ -18,7 +18,8 @@ const path = require('path');
 const fs = require('fs');
 const cfg = require('./config');
 const mentions = require('./mentions');
-const privates = require('./privates');
+const inbox = require('./inbox').createInbox();
+const security = require('./security');
 const icons = require('./icons');
 const navigate = require('./navigate');
 
@@ -63,6 +64,7 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 
 function init() {
   settings = cfg.load();
+  purgeLegacyNotificationFiles();
   if (Array.isArray(settings.pinnedGroups)) {   // chuyển ghim từ bản 1.4
     const old = settings.pinnedGroups.map((n) => 'g:' + n);
     settings.pinnedBubbles = [...new Set([...(settings.pinnedBubbles || []), ...old])];
@@ -87,6 +89,13 @@ function init() {
       openChat();
       toast('Quét mã QR để đăng nhập. Sau đó bấm ⋯ → Cài đặt để nhập tên Zalo của bạn.', 15000);
     }, 900);
+  }
+}
+
+// Remove legacy plaintext previews while preserving the persistent Zalo session.
+function purgeLegacyNotificationFiles() {
+  for (const name of ['nhac-ten.json', 'tin-rieng.json', 'anh-dai-dien.json']) {
+    try { fs.rmSync(path.join(app.getPath('userData'), name), { force: true }); } catch (_) {}
   }
 }
 
@@ -264,15 +273,15 @@ ipcMain.on('bubble:drag-move', (e) => {
   if (chatOpen) placeChat();
   updateStack();
 });
-ipcMain.on('bubble:drag-end', () => { dragOffset = null; snapBubble(); });
+ipcMain.on('bubble:drag-end', (e) => { if (e.sender !== bubbleWin.webContents) return; dragOffset = null; snapBubble(); });
 // Bấm bong bóng chính: mở khung chat ở trang chủ (nếu bật trong Cài đặt)
 function mainBubbleToggle() {
   const opening = !chatOpen;
   toggleChat();
   if (opening && settings.mainOpensHome) goHome(false);
 }
-ipcMain.on('bubble:click', () => mainBubbleToggle());
-ipcMain.on('bubble:menu', () => buildMenu().popup({ window: bubbleWin }));
+ipcMain.on('bubble:click', (e) => { if (e.sender === bubbleWin.webContents) mainBubbleToggle(); });
+ipcMain.on('bubble:menu', (e) => { if (e.sender === bubbleWin.webContents) buildMenu().popup({ window: bubbleWin }); });
 
 /* ---------------- Khung chat (Zalo Web) ---------------- */
 
@@ -295,9 +304,13 @@ function createChat() {
 
   const ses = session.fromPartition('persist:zalo');
   ses.setUserAgent(chromeUA());
-  const allowed = ['notifications', 'media', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen'];
-  ses.setPermissionRequestHandler((_wc, perm, cb) => cb(allowed.includes(perm)));
-  ses.setPermissionCheckHandler((_wc, perm) => allowed.includes(perm));
+  // Deny camera, microphone, screen and clipboard-read by default.
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    const origin = details && details.requestingUrl;
+    callback(security.isAllowedZaloPermission(wc, zaloView && zaloView.webContents, permission, origin, details));
+  });
+  ses.setPermissionCheckHandler((wc, permission, requestingOrigin, details) =>
+    security.isAllowedZaloPermission(wc, zaloView && zaloView.webContents, permission, requestingOrigin, details));
 
   zaloView = new WebContentsView({
     webPreferences: {
@@ -327,11 +340,11 @@ function createChat() {
   const wc = zaloView.webContents;
   wc.on('page-title-updated', (_e, title) => updateUnread(title));
   wc.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
+    if (security.isSafeExternalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   wc.on('will-navigate', (e, url) => {
-    if (!ZALO_HOST.test(url)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+    if (!ZALO_HOST.test(url)) { e.preventDefault(); if (security.isSafeExternalUrl(url)) shell.openExternal(url); }
   });
   wc.loadURL(ZALO_URL);
 }
@@ -413,12 +426,13 @@ function onChatBlur() {
   }, 200);
 }
 
-ipcMain.on('shell:min', () => hideChat());
-ipcMain.on('shell:pin', () => { settings.pinChat = !settings.pinChat; cfg.save(settings); pushState(); });
-ipcMain.on('shell:capture', () => setTimeout(startCapture, 120));
-ipcMain.on('shell:reload', () => zaloView && zaloView.webContents.reload());
-ipcMain.on('shell:menu', () => buildMenu().popup({ window: chatWin }));
-ipcMain.on('shell:expand', () => openZaloPc());
+const fromShell = (e) => chatWin && e.sender === chatWin.webContents;
+ipcMain.on('shell:min', (e) => { if (fromShell(e)) hideChat(); });
+ipcMain.on('shell:pin', (e) => { if (!fromShell(e)) return; settings.pinChat = !settings.pinChat; cfg.save(settings); pushState(); });
+ipcMain.on('shell:capture', (e) => { if (fromShell(e)) setTimeout(startCapture, 120); });
+ipcMain.on('shell:reload', (e) => { if (fromShell(e) && zaloView) zaloView.webContents.reload(); });
+ipcMain.on('shell:menu', (e) => { if (fromShell(e)) buildMenu().popup({ window: chatWin }); });
+ipcMain.on('shell:expand', (e) => { if (fromShell(e)) openZaloPc(); });
 
 /* ---------------- Mở rộng: mở ứng dụng Zalo PC ---------------- */
 
@@ -505,8 +519,9 @@ function updateUnread(title) {
 }
 
 function markEverythingRead() {
+  inbox.markAll();
   mentions.markAll();
-  privates.markAll();
+  updateStack();
 }
 
 function norm(s) { return String(s || '').toLowerCase(); }
@@ -541,8 +556,15 @@ async function resolveIcon(src) {
   try {
     if (/^data:image\//i.test(src)) img = nativeImage.createFromDataURL(src);
     else if (/^https:\/\//i.test(src)) {
-      const res = await session.fromPartition('persist:zalo').fetch(src);
-      if (res.ok) img = nativeImage.createFromBuffer(Buffer.from(await res.arrayBuffer()));
+      // Only fetch avatars from Zalo-owned domains, with a strict size limit.
+      const host = new URL(src).hostname.toLowerCase();
+      if (!/(^|\.)(zalo\.me|zadn\.vn)$/.test(host)) return '';
+      const res = await session.fromPartition('persist:zalo').fetch(src, { signal: AbortSignal.timeout(5000) });
+      const len = Number(res.headers.get('content-length') || 0);
+      if (!res.ok || (len && len > 2 * 1024 * 1024)) return '';
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2 * 1024 * 1024) return '';
+      img = nativeImage.createFromBuffer(buf);
     }
   } catch (e) { img = null; }
   if (!img || img.isEmpty()) return '';
