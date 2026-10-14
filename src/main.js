@@ -1190,7 +1190,10 @@ function openSettings() {
   settingsWin.on('closed', () => { settingsWin = null; });
 }
 
-ipcMain.handle('settings:get', () => ({
+const fromSettings = (e) => settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
+ipcMain.handle('settings:get', (e) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
+  return ({
   myName: settings.myName,
   notifyMode: settings.notifyMode,
   tagKeywords: (settings.tagKeywords || []).join('\n'),
@@ -1218,9 +1221,11 @@ ipcMain.handle('settings:get', () => ({
   bubbleImagePath: settings.bubbleImagePath,
   zaloPcPath: settings.zaloPcPath,
   zaloPcFound: findZaloPc()
-}));
+  });
+});
 
-ipcMain.handle('settings:save', (_e, s) => {
+ipcMain.handle('settings:save', (e, s) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
   s = s || {};
   const lines = (v) => String(v || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 50);
   settings.myName = String(s.myName || '').trim().replace(/^@/, '').slice(0, 80);
@@ -1257,8 +1262,9 @@ ipcMain.handle('settings:save', (_e, s) => {
   return { ok: errors.length === 0, errors };
 });
 
-ipcMain.handle('settings:browse-zalo', async () => pickZaloPc(settingsWin));
-ipcMain.handle('settings:browse-bubble', async () => {
+ipcMain.handle('settings:browse-zalo', async (e) => fromSettings(e) ? pickZaloPc(settingsWin) : '');
+ipcMain.handle('settings:browse-bubble', async (e) => {
+  if (!fromSettings(e)) return { path: '' };
   const r = await dialog.showOpenDialog(settingsWin || null, {
     title: 'Chọn ảnh cho bong bóng',
     properties: ['openFile'],
@@ -1271,14 +1277,17 @@ ipcMain.handle('settings:browse-bubble', async () => {
   return { path: p, url: im.url, animated: im.animated, hasAlpha: !!im.hasAlpha };
 });
 
-ipcMain.handle('settings:bubble-gallery', () => ({
+ipcMain.handle('settings:bubble-gallery', (e) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
+  return ({
   logo: (imageFile(path.join(ASSETS, 'bubble-zalo.png')) || {}).url || '',
   presets: PRESETS.map((p) => {
     const im = imageFile(presetFile(p.id)) || {};
     return { id: p.id, name: p.name, url: im.url || '', animated: !!im.animated };
   }),
   custom: settings.bubbleImagePath ? (imageFile(settings.bubbleImagePath) || null) : null
-}));
+  });
+});
 
 ipcMain.on('settings:close', (e) => {
   if (settingsWin && e.sender === settingsWin.webContents) settingsWin.close();
