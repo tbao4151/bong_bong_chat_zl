@@ -16,9 +16,7 @@ const DEFAULTS = {
   muted: false,
   pinChat: false,
   autoStart: false,                    // user must explicitly enable Windows startup,
-  hotkeyCapture: 'Control+Alt+S',
   hotkeyToggle: 'Control+Alt+Z',
-  hotkeyExcel: 'Control+Alt+E',
   bubbleStyle: 'logo',              // 'logo' | 'classic' (xanh) | 'preset' (icon có sẵn) | 'custom' (ảnh/GIF của bạn)
   bubbleImagePath: '',
   bubblePreset: '',                 // id icon có sẵn khi bubbleStyle = 'preset'
