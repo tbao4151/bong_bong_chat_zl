@@ -26,7 +26,7 @@ const DEFAULTS = {
   bubbleSize: 60,                   // cỡ hình bong bóng chính (40–160 px)
   groupBubbles: true,               // Bong bóng cho từng nhóm có tin nhắn mới
   peopleBubbles: true,              // Bong bóng cho từng người nhắn riêng
-  useAvatars: true,                 // Hiện ảnh đại diện lấy từ thông báo Zalo
+  useAvatars: false,                // Tắt tải avatar mặc định, có thể bật thủ công
   mainOpensHome: true,              // Bấm bong bóng chính -> về trang chủ Zalo
   hideReadBubbles: false,           // false = đọc xong vẫn giữ bong bóng, chỉ mất số
   groupMax: 5,                      // tổng số bong bóng tối đa (nhóm + người)
