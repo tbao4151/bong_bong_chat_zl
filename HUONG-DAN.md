@@ -1,66 +1,64 @@
-# Zalo Bong Bóng 2.0 – bản thử nghiệm dành cho Windows
+# Zalo Bong Bóng Secure 2.1 – Windows (bản kiểm thử bảo mật)
 
-Ứng dụng Electron chạy **Zalo Web** (`https://chat.zalo.me/`) trong cửa sổ gọn, có bong bóng nổi tương tự Android. Đây là dự án **không chính thức**, không do Zalo phát triển hoặc chứng nhận bảo mật.
+Đây là ứng dụng **không chính thức** giúp hiển thị bong bóng nổi giống Android khi **Zalo Web phát sinh thông báo**. App không sử dụng API chính thức của Zalo, do đó có thể bỏ sót thông báo hoặc mở sai cuộc trò chuyện nếu Zalo đổi giao diện. Không đảm bảo tương đương Android.
 
-## Bong bóng tin nhắn mới
+## Các chức năng
 
-- **Tin nhắn riêng:** khi Zalo Web phát sinh thông báo, một bong bóng nhỏ của người gửi xuất hiện dưới bong bóng chính. Nhiều tin của cùng một người gom vào một bong bóng.
-- **Tin nhắn nhóm:** tạo bong bóng theo tên nhóm ngay cả khi bạn không được @tag. Nhóm có @tag được đánh dấu khác màu.
-- **Bấm bong bóng:** mở khung Zalo Web và thử chuyển đến hội thoại theo tên hoặc thao tác thông báo gốc. Nếu Zalo đổi cấu trúc giao diện, tính năng này có thể không hoạt động, bạn vẫn mở hội thoại bằng tay.
-- **Rê chuột:** xem tên và số tin; nội dung chỉ hiện nếu tắt tùy chọn ẩn xem trước.
-- **Đọc xong:** số tin mới trở về 0, bong bóng tự ẩn theo thời hạn đã đặt; có tùy chọn ẩn ngay khi đọc.
-- Mỗi lần nhận tin mới có thể hiện hiệu ứng viền; chế độ chuông/thông báo hệ thống vẫn tùy thiết lập @tag, ưu tiên hay mọi tin.
+- Bong bóng riêng cho từng người nhắn, cập nhật số tin chưa đọc.
+- Bong bóng nhóm cho tin nhắn đến (không cần @tag); @tag được đánh dấu khác biệt.
+- Bấm vào bong bóng mở khung Zalo Web và thử đi tới hội thoại tương ứng.
+- Cài đặt số bong bóng tối đa, ghim, tự ẩn, tắt âm, ẩn nội dung xem trước.
+- Tự khởi động cùng Windows mặc định **tắt**. Để nhận bong bóng phải để ứng dụng đang chạy.
+- Khi bật tính năng ảnh đại diện, ứng dụng chỉ tải ảnh từ các miền Zalo cho phép.
 
-**Điều kiện:** ứng dụng phải đang chạy, có mạng, còn phiên đăng nhập Zalo Web và Zalo Web thực sự phát sinh thông báo mà preload nhận được. Ứng dụng **không** đọc thông báo của Zalo PC, không có API chính thức của Zalo và **không thể bảo đảm nhận mọi tin**, đặc biệt khi Zalo Web tự thay đổi cách tạo thông báo, khi đang ở chính cuộc trò chuyện hoặc sau khi máy ngủ.
+## Mô hình bảo mật
 
-## Thay đổi an toàn trong 2.0
+- Electron 44.7.2, WebContentsView sandbox, tắt Node Integration, bật Context Isolation.
+- Electron Packager 20.3.0 thay cho electron-builder cũ có phụ thuộc cảnh báo DoS.
+- Cài thư viện theo đúng `package-lock.json` qua `npm ci`.
+- CI thực hiện `npm audit --audit-level=moderate`. Chỉ đóng gói nếu audit và unit test thành công.
+- Không gọi `desktopCapturer`; đã **loại bỏ chụp màn hình, công cụ ghi chú ảnh và gửi vùng Excel**, cũng không có API đọc clipboard.
+- Quyền media (camera, micro), clipboard-read, fullscreen bị từ chối đối với Zalo Web. Chỉ xem xét quyền thông báo và ghi clipboard đã xử lý từ origin Zalo chính.
+- Mã thông báo, hình đại diện và bản xem trước được giữ trong RAM, không lưu thành các tệp JSON plaintext. Dữ liệu đó mất khi thoát ứng dụng.
+- **Phiên đăng nhập Zalo Web vẫn lưu trên đĩa**, giống việc trình duyệt ghi nhớ đăng nhập. Thư mục mới `%APPDATA%\Zalo Bong Bong Secure`, cách ly hoàn toàn với phiên đăng nhập và dữ liệu ứng dụng cũ.
+- Nội dung xem trước và tải avatar đều **tắt theo mặc định**.
+- Từ chối URL bên ngoài không dùng HTTPS; hiện hộp xác nhận trước khi mở trình duyệt ngoài.
 
-- Electron **44.7.2**, electron-builder **26.15.3**; không còn dùng Electron 33 hết hỗ trợ.
-- Chỉ cho phép phiên Zalo Web ở origin `https://chat.zalo.me` xin quyền thông báo và ghi clipboard đã xử lý. Từ chối mặc định đọc clipboard, microphone/camera, chụp màn hình qua API web, v.v.
-- Vẫn có **chụp màn hình thủ công** (Ctrl+Alt+S) và **gửi vùng Excel vừa sao chép** (Ctrl+Alt+E) bằng chức năng nội bộ khi người dùng kích hoạt.
-- **Không lưu lịch sử thông báo, nội dung tin nhắn hay avatar ra các file JSON.** Bộ nhớ trong phiên được xóa khi đóng ứng dụng. Khi nâng cấp, các file cache JSON dạng cũ được xóa, nhưng phiên đăng nhập Zalo Web không bị xóa.
-- **Phiên Zalo Web (cookie, storage)** vẫn tồn tại trên ổ đĩa để không cần đăng nhập lại. Vì vậy không nên dùng nếu máy tính không đáng tin cậy hoặc tài khoản hệ điều hành bị chia sẻ.
-- Mặc định ẩn nội dung xem trước và **không** bật tự khởi động cùng Windows. Có thể tự bật nếu muốn bong bóng luôn hoạt động khi đăng nhập Windows.
-- Hạn chế URL avatar được tải từ Zalo; kiểm tra cửa sổ gọi các kênh điều khiển nội bộ.
-- CI thực hiện test, npm audit và đóng gói Windows. Chưa có chữ ký số cho file EXE.
+## Tải và chạy bản portable
 
-## Cài đặt từ mã nguồn (Windows 10/11)
+1. Vào GitHub repository → **Actions** → workflow **Test and Package Windows**.
+2. Chọn bản build mới nhất ở nhánh `feature/secure-android-style-bubbles`, kiểm tra **tất cả các bước đều Success** và commit SHA tương ứng với mã nguồn đã review.
+3. Tải artifact `ZaloBongBong-v2.1-portable-unsigned` và giải nén ZIP vào thư mục bạn có quyền ghi, ví dụ `D:\Apps\ZaloBongBongSecure`.
+4. Mở `ZaloBongBong.exe` trong thư mục vừa giải nén, đăng nhập **tài khoản thử** bằng Zalo QR trên điện thoại.
+5. Nhờ tài khoản khác gửi tin riêng/nhóm, kiểm tra hiển thị bong bóng, mở đúng hội thoại, đóng/mở và logout.
 
-1. Cài Node.js 24 LTS phù hợp hoặc bản Node tương thích theo tài liệu Electron.
-2. Tải đúng mã nguồn từ nhánh/commit mà bạn tự kiểm tra, không chạy một EXE do người lạ gửi.
-3. Mở PowerShell trong thư mục chứa `package.json`, chạy:
+**Không tải bản EXE v2.0 trước đây.** Tất cả file EXE vẫn **chưa được ký số**. Không bỏ qua cảnh báo Microsoft Defender/SmartScreen nếu file không được xác minh. Quy trình build thành công không chứng minh ứng dụng an toàn tuyệt đối.
+
+## Chạy từ mã nguồn (Windows)
+
+Cài Node.js 24 và Git. Mở PowerShell tại thư mục dự án:
 
 ```powershell
-npm install
+npm ci
 npm test
+npm audit --audit-level=moderate
 npm start
 ```
 
-4. Nếu chạy thử bình thường, có thể đóng gói bằng:
+Nếu muốn đóng gói bản portable cho chính máy của bạn:
 
 ```powershell
 npm run dist
 ```
 
-Trong thư mục `dist` sẽ có bản Setup và bản Portable. Đây là bản **chưa ký số**, Windows SmartScreen có thể cảnh báo; không bỏ qua cảnh báo chỉ vì thấy tên Zalo.
+Thư mục `dist/ZaloBongBong-win32-x64/` chứa `ZaloBongBong.exe` và các tài nguyên đi kèm. Phải giữ toàn bộ thư mục, không chép riêng file EXE.
 
-**Khóa phụ thuộc:** mã nguồn hiện chưa có `package-lock.json` được tạo từ npm registry trong môi trường CI có internet. Sau lần `npm install` đáng tin cậy đầu tiên, hãy kiểm tra `npm audit`, commit lockfile và dùng `npm ci` cho các bản build kế tiếp. Workflow CI hiện tạo lockfile tạm thời trong runner trước khi chạy `npm ci`; đây chưa phải reproducible build lý tưởng.
+## Những giới hạn cần biết
 
-## Tạo EXE bằng GitHub Actions
+- Chỉ đọc thông báo Zalo Web, không đọc dữ liệu từ ứng dụng Zalo PC đang cài trên máy.
+- Nếu Zalo Web không tạo Notification, bong bóng có thể không xuất hiện. Không đọc toàn bộ DOM tin nhắn để tránh tăng quyền truy cập dữ liệu.
+- Chưa có kết quả kiểm thử với tài khoản thật, máy Windows của người dùng hoặc phân tích lưu lượng động. Chỉ coi đây là bản **kiểm thử bảo mật** cho đến khi các bước này được xác nhận.
+- Source code công khai cho phép kiểm tra, nhưng không bảo đảm artifact EXE phát hành không bị sửa. Cần chữ ký số từ đơn vị phát hành tin cậy nếu muốn phân phối rộng.
+- Thoát ứng dụng sẽ xóa dữ liệu bong bóng trong RAM nhưng **không** tự đăng xuất phiên Web. Muốn xóa hoàn toàn, hãy đăng xuất thiết bị trong Zalo, thoát app và xóa thư mục `%APPDATA%\Zalo Bong Bong Secure` (đồng thời mất tất cả cài đặt).
 
-Trong trang GitHub, chọn **Actions → Test and Build Windows**. Workflow chạy trên Windows, kiểm thử trước, kiểm tra dependency audit rồi mới tạo artifact `ZaloBongBong-v2-Windows-unsigned`. Khi nhánh được merge vào `main`, có thể chạy thủ công từ **Run workflow**. Nếu các bước kiểm thử/audit thất bại, **không** nên sử dụng artifact.
-
-## Các thao tác khác
-
-- **Ctrl+Alt+Z:** mở/đóng khung chat; **Ctrl+Alt+S:** chụp màn hình; **Ctrl+Alt+E:** chuyển vùng Excel đã copy thành ảnh.
-- Chuột phải bong bóng chính để mở menu chỉnh thông báo, chế độ rung/âm, cỡ, bong bóng nhóm và riêng, khởi động cùng Windows.
-- Nút **Mở rộng** mở ứng dụng Zalo PC chính nếu đã cài; không chia sẻ phiên đăng nhập với Zalo Web.
-- Để xóa phiên đăng nhập Zalo Web hoàn toàn, hãy thoát ứng dụng, đăng xuất thiết bị từ Zalo chính và xóa thư mục dữ liệu ứng dụng `%APPDATA%\Zalo Bong Bong`. Thao tác này cũng xóa mọi cài đặt người dùng; đường dẫn thực tế phụ thuộc cấu hình Windows/Electron.
-
-## Rủi ro và giới hạn chưa được xác minh
-
-Chưa thực hiện kiểm thử end-to-end trong Windows thật, thử nhiều kiểu tin nhắn Zalo hoặc phân tích lưu lượng mạng của EXE. Zalo có thể hạn chế hoặc thay đổi tích hợp với ứng dụng thứ ba. Phiên WebContents được tải từ Internet nên vẫn có rủi ro phần mềm, cookie và web supply-chain. Không thể cam kết ứng dụng an toàn tuyệt đối hay ổn định 100%.
-
-Cần thử trên tài khoản phụ trước khi đăng nhập tài khoản chính. Đối với cuộc gọi/video, hãy dùng Zalo chính thức; quyền microphone và camera của trang web đã bị tắt theo mặc định.
-
-**Cấu trúc chính:** `src/main.js` (Electron), `src/inbox.js` (bong bóng lưu RAM), `src/security.js` (chính sách quyền), `src/zalo-preload.js` (nhận thông báo), `src/ui/stack.html` (bong bóng riêng/nhóm), `test/security-and-inbox.test.js` (kiểm thử tự động).
+Chi tiết code: `src/main.js`, `src/security.js`, `src/inbox.js`, `src/zalo-preload.js`; test nằm trong `test/`.
