@@ -1,0 +1,46 @@
+{
+  "name": "zalo-bong-bong",
+  "productName": "Zalo Bong Bong",
+  "version": "1.8.2",
+  "description": "Bong bong chat Zalo noi tren man hinh Windows",
+  "main": "src/main.js",
+  "author": "TCNC2",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "vn.bachtung.zalobongbong",
+    "productName": "Zalo Bong Bong",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Zalo Bong Bong",
+      "createDesktopShortcut": true
+    },
+    "portable": {
+      "artifactName": "ZaloBongBong-portable-${version}.exe"
+    }
+  }
+}

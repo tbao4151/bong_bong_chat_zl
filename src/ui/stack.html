@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bong bóng nhóm và người nhắn riêng</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; font-family: 'Segoe UI', system-ui, sans-serif; }
+  .g {
+    position: absolute; border-radius: 50%; border: 3px solid #FFFFFF; box-sizing: border-box; padding: 0;
+    color: #FFFFFF; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35); transition: transform .15s ease;
+  }
+  .g:hover { transform: scale(1.08); }
+  .g img.av { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; pointer-events: none; }
+  .g:focus-visible { outline: 3px solid #FFB547; outline-offset: 2px; }
+  .g.tag { border-color: #FF8A3D; }
+  .g.fresh::after {
+    content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 3px solid #FF8A3D;
+    animation: ring 1.2s ease-out infinite;
+  }
+  @keyframes ring { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.18); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .g { transition: none; } .g:hover { transform: none; } .g.fresh::after { animation: none; } }
+  .at {
+    position: absolute; top: -8px; right: -10px; min-width: 26px; height: 20px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 10px; border: 2px solid #FFFFFF; background: #FF8A3D; color: #1B2229;
+    font-size: 11px; font-weight: 800; line-height: 16px; text-align: center;
+  }
+  .num {
+    position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 11px; border: 2px solid #FFFFFF; background: #D8361F; color: #FFFFFF;
+    font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+  }
+  .g.person.fresh::after { border-color: #4D9BFF; }
+  .kind {
+    position: absolute; bottom: -4px; right: -4px; width: 20px; height: 20px; border-radius: 50%;
+    background: #FFFFFF; border: 2px solid #FFFFFF; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  }
+  .pin {
+    position: absolute; bottom: -4px; left: -4px; width: 20px; height: 20px; border-radius: 50%;
+    background: #1B2229; border: 2px solid #FFFFFF; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  }
+  #all {
+    position: absolute; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid #5B6670;
+    background: #1B2229; color: #FFFFFF; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  #all:hover { background: #2B343B; }
+  #card {
+    position: absolute; width: 240px; display: none; background: #FFFFFF; color: #1B2229; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40); padding: 10px 12px; box-sizing: border-box; pointer-events: none;
+  }
+  #card .top { display: flex; justify-content: space-between; gap: 8px; }
+  #card .nm { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #card .tm { font-size: 12px; color: #5B6670; flex-shrink: 0; }
+  #card .by { font-size: 12px; color: #8A4B08; font-weight: 600; margin-top: 3px; }
+  #card .tx { font-size: 13px; color: #3D4852; line-height: 1.4; margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  #card .hint { font-size: 12px; color: #0A5BD6; font-weight: 600; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="card" aria-hidden="true">
+  <div class="top"><span class="nm" id="cNm"></span><span class="tm" id="cTm"></span></div>
+  <div class="by" id="cBy"></div>
+  <div class="tx" id="cTx"></div>
+  <div class="hint" id="cHint">Bấm để mở · Chuột phải để ghim/đóng</div>
+</div>
+<script>
+  const root = document.getElementById('root');
+  const card = document.getElementById('card');
+  const PALETTE = ['#0A5BD6', '#B4530A', '#2F7A4D', '#9C2F5E', '#6B4FB3', '#0E7C86', '#A23B2A', '#3D4852'];
+  let data = { side: 'right', size: 52, step: 66, groups: [] };
+  let inside = 0;
+
+  function initials(name) {
+    const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!w.length) return '?';
+    const first = Array.from(w[0])[0] || '';
+    const last = w.length > 1 ? Array.from(w[w.length - 1])[0] || '' : Array.from(w[0])[1] || '';
+    return (first + last).toUpperCase();
+  }
+  function colorOf(name) {
+    let h = 0;
+    for (const ch of String(name)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    return PALETTE[h % PALETTE.length];
+  }
+  function timeOf(at) {
+    if (!at) return '';
+    const d = new Date(at), now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    if (d.toDateString() === now.toDateString()) return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return 'Hôm qua';
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
+  }
+
+  // Chỉ nhận chuột khi đang ở trên bong bóng / nút, còn lại để chuột xuyên qua xuống app bên dưới
+  function hot(el) {
+    el.addEventListener('mouseenter', () => { if (++inside === 1) app.send('stack:mouse', true); });
+    el.addEventListener('mouseleave', () => { inside = Math.max(0, inside - 1); if (!inside) app.send('stack:mouse', false); });
+  }
+
+  function showCard(g, top, colLeft) {
+    document.getElementById('cNm').textContent = g.name;
+    document.getElementById('cTm').textContent = timeOf(g.at);
+    const others = g.count > 1 ? ' và ' + (g.count - 1) + ' lần khác' : '';
+    if (g.kind === 'p') {
+      document.getElementById('cBy').textContent = 'Tin nhắn riêng' + (g.count ? ' · ' + g.count + ' tin mới' : '');
+      document.getElementById('cTx').textContent = g.text || 'Chưa có tin nhắn gần đây.';
+      document.getElementById('cHint').textContent = 'Bấm để mở chat · Chuột phải để ghim/đóng';
+    } else {
+      document.getElementById('cBy').textContent = g.sender ? 'Nhóm · Người tag: ' + g.sender + others : (g.pinned ? 'Nhóm đã ghim' : 'Nhóm');
+      document.getElementById('cTx').textContent = g.text || (g.total ? '' : 'Chưa có tin nhắc tên gần đây.');
+      document.getElementById('cHint').textContent = 'Bấm để mở nhóm · Chuột phải để ghim/đóng';
+    }
+    card.style.display = 'block';
+    card.style.top = Math.max(4, top - 6) + 'px';
+    card.style.left = (data.side === 'right' ? colLeft - 10 - 240 : colLeft + data.size + 10) + 'px';
+  }
+  function hideCard() { card.style.display = 'none'; }
+
+  function render() {
+    root.textContent = '';
+    hideCard();
+    inside = 0;
+    app.send('stack:mouse', false);
+    const W = document.documentElement.clientWidth;
+    const S = data.size;
+    const colLeft = data.side === 'right' ? W - 14 - S : 14;
+    data.groups.forEach((g, i) => {
+      const top = 12 + i * data.step;
+      const b = document.createElement('button');
+      const isP = g.kind === 'p';
+      b.className = 'g' + (isP ? ' person' : '') + (g.count && !isP ? ' tag' : '') + (g.fresh ? ' fresh' : '');
+      b.style.cssText = 'left:' + colLeft + 'px;top:' + top + 'px;width:' + S + 'px;height:' + S + 'px;background:' + colorOf(g.name);
+      b.textContent = initials(g.name);
+      if (g.avatar) {
+        const im = document.createElement('img');
+        im.className = 'av';
+        im.alt = '';
+        im.src = g.avatar;
+        im.onerror = () => im.remove();   // ảnh lỗi thì quay về chữ viết tắt
+        b.appendChild(im);
+      }
+      b.setAttribute('aria-label', isP
+        ? g.name + ', tin nhắn riêng' + (g.count ? ', ' + g.count + ' tin mới' : '')
+        : 'Nhóm ' + g.name + (g.count ? ', ' + g.count + ' lần nhắc tên bạn chưa xem' : ''));
+      if (g.count) {
+        const at = document.createElement('span');
+        at.className = isP ? 'num' : 'at';
+        at.textContent = (isP ? '' : '@') + (g.count > 9 ? '9+' : g.count);
+        b.appendChild(at);
+      }
+      if (!isP) {
+        // biểu tượng nhỏ "nhóm" để phân biệt với người nhắn riêng
+        const k = document.createElement('span');
+        k.className = 'kind';
+        k.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1B2229" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M16 14.2c2.9.3 5 2.6 5 5.8"></path></svg>';
+        b.appendChild(k);
+      }
+      if (g.pinned) {
+        const pin = document.createElement('span');
+        pin.className = 'pin';
+        pin.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 3h6l-1 6 3 4H7l3-4z"></path></svg>';
+        b.appendChild(pin);
+      }
+      hot(b);
+      b.addEventListener('mouseenter', () => showCard(g, top, colLeft));
+      b.addEventListener('mouseleave', hideCard);
+      b.addEventListener('click', () => { hideCard(); app.send('stack:open', g.key); });
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); hideCard(); app.send('stack:menu', g.key); });
+      root.appendChild(b);
+    });
+    const unpinned = data.groups.some((g) => !g.pinned);
+    if (unpinned) {
+      const all = document.createElement('button');
+      all.id = 'all';
+      all.textContent = 'Đóng tất cả';
+      all.title = 'Đóng tất cả bong bóng (trừ bong bóng đã ghim)';
+      const top = 12 + data.groups.length * data.step - 4;
+      all.style.top = top + 'px';
+      root.appendChild(all);
+      const w = all.offsetWidth;
+      all.style.left = (colLeft + S / 2 - w / 2) + 'px';
+      hot(all);
+      all.addEventListener('click', () => app.send('stack:close-all'));
+    }
+  }
+
+  app.on('stack:data', (d) => { data = d; render(); });
+</script>
+</body>
+</html>

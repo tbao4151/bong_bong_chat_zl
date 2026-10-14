@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data: blob:; connect-src data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bong bóng Zalo</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  body { display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', system-ui, sans-serif; }
+  :root { --size: 60px; }
+  #b {
+    position: relative; width: var(--size); height: var(--size); border-radius: 50%; padding: 0;
+    border: 3px solid #FFFFFF; background: #0A5BD6; color: #FFFFFF; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+    transition: background-color .15s ease, transform .15s ease;
+    touch-action: none;
+  }
+  #b:hover { transform: scale(1.05); }
+  #b:focus-visible { outline: 3px solid #FFB547; outline-offset: 2px; }
+  #b.open { background: #0848A8; }
+  #b.off { background: #5B6670; }
+  #pic, #cv { display: none; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; pointer-events: none; }
+  #b.pic { background: #FFFFFF; border-width: 2px; }
+  #b.pic #pic { display: block; }
+  #b.pic.keyed #pic { display: none; }
+  #b.pic.keyed #cv { display: block; }
+  #b.pic svg.ico { display: none; }
+  #b.pic.open { box-shadow: 0 0 0 3px #0A5BD6, 0 4px 10px rgba(0, 0, 0, 0.35); }
+  #b.pic.off #pic { filter: grayscale(1); opacity: .75; }
+  /* Giữ nguyên hình: không khung tròn, không nền, chỉ thấy chủ thể (PNG trong suốt giữ trong suốt) */
+  #b.pic.free { background: transparent; border: none; border-radius: 0; box-shadow: none; }
+  #b.pic.free #pic, #b.pic.free #cv { border-radius: 0; object-fit: contain; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35)); }
+  #b.pic.free.open #pic, #b.pic.free.open #cv { filter: drop-shadow(0 0 4px #0A5BD6) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35)); }
+  #b.pic.free.off #pic, #b.pic.free.off #cv { filter: grayscale(1) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35)); opacity: .75; }
+  #b.pic.free.alert::after { display: none; }
+  #b.pic.free.alert #pic, #b.pic.free.alert #cv { animation: glow 1.2s ease-in-out infinite; }
+  @keyframes glow {
+    0%, 100% { filter: drop-shadow(0 0 2px #FF8A3D) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35)); }
+    50% { filter: drop-shadow(0 0 9px #FF8A3D) drop-shadow(0 0 3px #FF8A3D); }
+  }
+  @media (prefers-reduced-motion: reduce) { #b.pic.free.alert #pic, #b.pic.free.alert #cv { animation: none; filter: drop-shadow(0 0 6px #FF8A3D); } }
+  #b.alert::after {
+    content: ''; position: absolute; inset: -7px; border-radius: 50%;
+    border: 3px solid #FF8A3D; animation: ring 1.2s ease-out infinite;
+  }
+  @keyframes ring { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.15); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #b.alert::after { animation: none; opacity: 1; } #b:hover { transform: none; } }
+  #badge {
+    position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 5px;
+    box-sizing: border-box; border-radius: 11px; border: 2px solid #FFFFFF;
+    background: #D8361F; color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center;
+  }
+  #badge[hidden] { display: none; }
+  #men {
+    position: absolute; top: -7px; left: -7px; min-width: 22px; height: 22px; padding: 0 4px;
+    box-sizing: border-box; border-radius: 11px; border: 2px solid #FFFFFF;
+    background: #FF8A3D; color: #1B2229; font-size: 12px; font-weight: 800; line-height: 18px; text-align: center;
+  }
+  #men[hidden] { display: none; }
+  #mute {
+    position: absolute; bottom: -4px; right: -4px; width: 20px; height: 20px; border-radius: 50%;
+    background: #1B2229; border: 2px solid #FFFFFF; display: flex; align-items: center; justify-content: center;
+  }
+  #mute[hidden] { display: none; }
+</style>
+</head>
+<body>
+<button id="b" aria-label="Mở Zalo">
+  <img id="pic" alt="">
+  <canvas id="cv" aria-hidden="true"></canvas>
+  <svg class="ico" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"></path>
+  </svg>
+  <span id="badge" hidden>0</span>
+  <span id="men" hidden title="Tin nhắc tên tôi">@</span>
+  <span id="mute" hidden>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M4 4l16 16"></path><path d="M11 5L6 9H3v6h3l5 4z"></path></svg>
+  </span>
+</button>
+<script>
+  const b = document.getElementById('b');
+  const badge = document.getElementById('badge');
+  const mute = document.getElementById('mute');
+  const men = document.getElementById('men');
+  let down = null, moved = false;
+
+  b.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    b.setPointerCapture(e.pointerId);
+    down = { x: e.screenX, y: e.screenY, onMen: men.contains(e.target) };
+    moved = false;
+    app.send('bubble:drag-start', { ox: e.clientX, oy: e.clientY });
+  });
+  b.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    if (!moved && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 4) moved = true;
+    if (moved) app.send('bubble:drag-move');
+  });
+  b.addEventListener('pointerup', () => {
+    if (!down) return;
+    const wasMoved = moved, onMen = down.onMen;
+    down = null;
+    if (wasMoved) app.send('bubble:drag-end');
+    else if (onMen) app.send('bubble:mentions');
+    else app.send('bubble:click');
+  });
+  b.addEventListener('click', (e) => { if (e.detail === 0) app.send('bubble:click'); }); // bàn phím
+  b.addEventListener('contextmenu', (e) => { e.preventDefault(); app.send('bubble:menu'); });
+
+  app.on('bubble:state', (s) => {
+    lastState = s;
+    applyPic();
+    badge.hidden = !s.unread;
+    badge.textContent = s.unread > 99 ? '99+' : String(s.unread);
+    mute.hidden = !s.muted;
+    men.hidden = !s.mentions;
+    men.textContent = s.mentions ? '@' + (s.mentions > 9 ? '9+' : s.mentions) : '@';
+    b.classList.toggle('open', !!s.open);
+    b.classList.toggle('off', s.mode === 'off');
+    b.classList.toggle('alert', !!s.alerting && !s.open);
+    b.setAttribute('aria-label', (s.open ? 'Thu gọn Zalo' : 'Mở Zalo') + (s.unread ? ', ' + s.unread + ' tin chưa đọc' : ''));
+  });
+
+  // Ảnh bong bóng: tĩnh hoặc GIF động. Với chế độ "chỉ chạy khi có tin mới", lúc bình thường
+  // hiện khung hình đầu (ảnh đứng yên), có tin mới thì cho chạy.
+  // Khi bật "Xóa nền": app tự làm trong suốt phần nền liền với mép ảnh (nền trắng / một màu),
+  // xử lý từng khung hình (kể cả GIF động) rồi vẽ lên canvas.
+  let imgInfo = null, still = '', lastState = {};
+  let keyed = null;            // { frames: [{ c: canvas, d: ms }], w, h }
+  let anim = null, frameIdx = 0, loadSeq = 0;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.getElementById('cv');
+
+  function keyFrame(src, w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(src, 0, 0, w, h);
+    const img = x.getImageData(0, 0, w, h), p = img.data;
+    // màu nền = màu phổ biến nhất ở 4 góc
+    const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]].map(([i, j]) => (j * w + i) * 4);
+    const opaque = corners.filter((o) => p[o + 3] > 200);
+    if (!opaque.length) return c;             // góc đã trong suốt: không cần xóa nền
+    const o0 = opaque[0];
+    const br = p[o0], bg = p[o0 + 1], bb = p[o0 + 2];
+    const TOL = 48, SOFT = 80;
+    const dist = (o) => Math.max(Math.abs(p[o] - br), Math.abs(p[o + 1] - bg), Math.abs(p[o + 2] - bb));
+    const seen = new Uint8Array(w * h);
+    const stack = [];
+    for (let i = 0; i < w; i++) { stack.push(i, (h - 1) * w + i); }
+    for (let j = 0; j < h; j++) { stack.push(j * w, j * w + w - 1); }
+    while (stack.length) {
+      const k = stack.pop();
+      if (seen[k]) continue;
+      seen[k] = 1;
+      const o = k * 4;
+      if (p[o + 3] < 10) { p[o + 3] = 0; } else {
+        const d = dist(o);
+        if (d > SOFT) continue;                                   // tới chủ thể: dừng lan
+        p[o + 3] = d <= TOL ? 0 : Math.round(p[o + 3] * (d - TOL) / (SOFT - TOL));   // mép mềm
+        if (d > TOL) continue;
+      }
+      const i = k % w, j = (k - i) / w;
+      if (i > 0) stack.push(k - 1);
+      if (i < w - 1) stack.push(k + 1);
+      if (j > 0) stack.push(k - w);
+      if (j < h - 1) stack.push(k + w);
+    }
+    x.putImageData(img, 0, 0);
+    return c;
+  }
+
+  async function buildKeyed(info, seq) {
+    const blob = await (await fetch(info.url)).blob();
+    const maxSide = Math.round((info.size || 60) * Math.max(2, window.devicePixelRatio || 1));
+    const fit = (w, h) => { const r = Math.min(1, maxSide / Math.max(w, h)); return [Math.max(1, Math.round(w * r)), Math.max(1, Math.round(h * r))]; };
+    const frames = [];
+    if (info.animated && 'ImageDecoder' in window) {
+      const dec = new ImageDecoder({ data: blob.stream(), type: blob.type || 'image/gif' });
+      await dec.tracks.ready;
+      const n = Math.min(dec.tracks.selectedTrack.frameCount || 1, 150);
+      for (let i = 0; i < n; i++) {
+        if (seq !== loadSeq) { dec.close(); return null; }
+        const { image } = await dec.decode({ frameIndex: i });
+        const [w, h] = fit(image.displayWidth, image.displayHeight);
+        frames.push({ c: keyFrame(image, w, h), d: Math.max(20, (image.duration || 100000) / 1000) });
+        image.close();
+      }
+      dec.close();
+    } else {
+      const bmp = await createImageBitmap(blob);
+      const [w, h] = fit(bmp.width, bmp.height);
+      frames.push({ c: keyFrame(bmp, w, h), d: 0 });
+      bmp.close();
+    }
+    return frames.length ? { frames, w: frames[0].c.width, h: frames[0].c.height } : null;
+  }
+
+  function drawFrame(i) {
+    if (!keyed) return;
+    const f = keyed.frames[i % keyed.frames.length];
+    if (cv.width !== f.c.width || cv.height !== f.c.height) { cv.width = f.c.width; cv.height = f.c.height; }
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, cv.width, cv.height);
+    x.drawImage(f.c, 0, 0);
+  }
+  function stopAnim() { clearTimeout(anim); anim = null; }
+  function runAnim() {
+    if (anim || !keyed || keyed.frames.length < 2) return;
+    const step = () => {
+      drawFrame(frameIdx);
+      const d = keyed.frames[frameIdx % keyed.frames.length].d;
+      frameIdx = (frameIdx + 1) % keyed.frames.length;
+      anim = setTimeout(step, d);
+    };
+    step();
+  }
+
+  function applyPic() {
+    const pic = document.getElementById('pic');
+    document.documentElement.style.setProperty('--size', ((imgInfo && imgInfo.size) || 60) + 'px');
+    if (!imgInfo || !imgInfo.url) { stopAnim(); pic.removeAttribute('src'); b.classList.remove('pic', 'free', 'keyed'); return; }
+    b.classList.add('pic');
+    b.classList.toggle('free', imgInfo.shape === 'free');
+    const busy = !!lastState.alerting || (lastState.unread > 0);
+    const moving = !imgInfo.animated || (!reduceMotion && (imgInfo.mode !== 'onNew' || busy));
+    if (imgInfo.removeBg && keyed) {
+      b.classList.add('keyed');
+      if (moving && keyed.frames.length > 1) runAnim();
+      else { stopAnim(); frameIdx = 0; drawFrame(0); }
+      return;
+    }
+    stopAnim();
+    b.classList.remove('keyed');
+    const src = moving ? imgInfo.url : (still || imgInfo.url);
+    if (pic.getAttribute('src') !== src) pic.src = src;
+  }
+
+  app.on('bubble:image', (d) => {
+    if (typeof d === 'string') d = { url: d, animated: false, mode: 'always', shape: 'circle', size: 60 };
+    imgInfo = d; still = ''; keyed = null; frameIdx = 0; stopAnim();
+    const seq = ++loadSeq;
+    if (d && d.url && d.animated) {
+      const im = new Image();
+      im.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = im.naturalWidth || 96; c.height = im.naturalHeight || 96;
+          c.getContext('2d').drawImage(im, 0, 0);
+          still = c.toDataURL('image/png');
+        } catch (e) { still = ''; }
+        applyPic();
+      };
+      im.src = d.url;
+    }
+    if (d && d.url && d.removeBg) {
+      buildKeyed(d, seq).then((k) => { if (seq === loadSeq) { keyed = k; applyPic(); } }).catch(() => {});
+    }
+    applyPic();
+  });
+
+  app.on('bubble:ping', (p) => { if (p && p.sound) beep(p.tagged); });
+
+  function beep(tagged) {
+    try {
+      const ctx = new AudioContext();
+      const notes = tagged ? [880, 1175] : [880];
+      notes.forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        const t = ctx.currentTime + i * 0.16;
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+        o.connect(g).connect(ctx.destination);
+        o.start(t); o.stop(t + 0.32);
+      });
+      setTimeout(() => ctx.close(), 900);
+    } catch (e) { /* bỏ qua */ }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Cài đặt – Zalo Bong Bóng</title>
+<style>
+  body { margin: 0; background: #F4F6F8; color: #1B2229; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 24px 96px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lead { color: #5B6670; margin: 0 0 20px; }
+  section { background: #FFFFFF; border: 1px solid #E3E7EB; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: #0A5BD6; }
+  label.field { display: block; font-weight: 600; margin: 12px 0 4px; }
+  label.field:first-of-type { margin-top: 0; }
+  .help { color: #5B6670; font-size: 12px; margin: 4px 0 0; }
+  select { width: 100%; height: 38px; border: 1px solid #CBD3DA; border-radius: 8px; padding: 0 8px; font: inherit; background: #FFFFFF; color: inherit; }
+  input[type=text], textarea {
+    width: 100%; box-sizing: border-box; border: 1px solid #CBD3DA; border-radius: 8px;
+    padding: 8px 10px; font: inherit; color: inherit; background: #FFFFFF;
+  }
+  textarea { min-height: 72px; resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid #0A5BD6; outline-offset: 0; border-color: #0A5BD6; }
+  .radio, .check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; cursor: pointer; }
+  .radio input, .check input { margin-top: 3px; accent-color: #0A5BD6; }
+  .key { font-family: inherit; text-align: center; font-weight: 600; cursor: pointer; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+  .tile {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px;
+    border: 2px solid #E3E7EB; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 12px; color: #1B2229; cursor: pointer;
+  }
+  .tile:hover { border-color: #9CC0F5; }
+  .tile[aria-checked=true] { border-color: #0A5BD6; background: #EEF4FE; }
+  .tile .th { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #FFFFFF; box-shadow: 0 0 0 1px #CBD3DA; background: #FFFFFF; }
+  .tile .classic { display: flex; align-items: center; justify-content: center; background: #0A5BD6; }
+  .tile .empty { display: flex; align-items: center; justify-content: center; background: #EEF1F4; color: #5B6670; font-size: 20px; }
+  .tile .tag { position: absolute; top: 4px; right: 4px; background: #FF8A3D; color: #1B2229; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 4px; }
+  .tile .nm { text-align: center; line-height: 1.2; }
+  footer {
+    position: fixed; left: 0; right: 0; bottom: 0; background: #FFFFFF; border-top: 1px solid #E3E7EB;
+    display: flex; align-items: center; gap: 8px; padding: 12px 24px;
+  }
+  #msg { flex: 1; font-size: 13px; }
+  #msg.ok { color: #2F7A4D; } #msg.err { color: #B42318; }
+  footer button { height: 40px; padding: 0 18px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  #save { background: #0A5BD6; color: #FFFFFF; border: none; }
+  #save:hover { background: #0848A8; }
+  #close { background: #FFFFFF; color: #1B2229; border: 1px solid #CBD3DA; }
+  button.small { height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #CBD3DA; background: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+  button:focus-visible { outline: 2px solid #FFB547; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cài đặt</h1>
+  <p class="lead">Thay đổi có hiệu lực ngay sau khi bấm Lưu.</p>
+
+  <section>
+    <h2>Thông báo khi được tag</h2>
+    <label class="field" for="myName">Tên Zalo của bạn</label>
+    <input type="text" id="myName" placeholder="Ví dụ: P. Kế hoạch BT">
+    <p class="help">Nhập đúng tên hiển thị của bạn trong nhóm. Khi ai đó gõ @tên này, bong bóng sẽ rung và kêu.</p>
+
+    <div role="radiogroup" aria-label="Chế độ thông báo" style="margin-top: 12px">
+      <label class="radio"><input type="radio" name="mode" value="tag"><span><b>Chỉ khi được tag tên</b> hoặc tin từ người/nhóm ưu tiên</span></label>
+      <label class="radio"><input type="radio" name="mode" value="all"><span><b>Mọi tin nhắn</b></span></label>
+      <label class="radio"><input type="radio" name="mode" value="off"><span><b>Tắt thông báo</b>, chỉ hiện số tin chưa đọc</span></label>
+    </div>
+
+    <label class="field" for="tagKeywords">Từ khóa coi như được tag</label>
+    <textarea id="tagKeywords" placeholder="Mỗi dòng một từ khóa"></textarea>
+    <p class="help">Mỗi dòng một từ. Ví dụ: "@Tất cả", "anh Kế hoạch", "gấp".</p>
+
+    <label class="field" for="priorityNames">Người hoặc nhóm luôn được báo</label>
+    <textarea id="priorityNames" placeholder="Mỗi dòng một tên"></textarea>
+    <p class="help">Ví dụ: tên quản đốc, nhóm "Phòng Kế hoạch". Tin từ đây luôn báo dù không tag.</p>
+
+    <label class="check"><input type="checkbox" id="hidePreview"><span>Ẩn nội dung tin trong thông báo (chỉ hiện người gửi)</span></label>
+    <label class="check"><input type="checkbox" id="muted"><span>Tắt âm báo</span></label>
+  </section>
+
+  <section>
+    <h2>Phím tắt</h2>
+    <label class="field" for="hotkeyCapture">Chụp màn hình nhanh</label>
+    <input type="text" id="hotkeyCapture" class="key" readonly>
+    <label class="field" for="hotkeyExcel">Gửi vùng Excel vừa copy</label>
+    <input type="text" id="hotkeyExcel" class="key" readonly>
+    <label class="field" for="hotkeyToggle">Mở / thu khung chat</label>
+    <input type="text" id="hotkeyToggle" class="key" readonly>
+    <p class="help">Bấm vào ô rồi nhấn tổ hợp phím mới (phải có Ctrl, Alt hoặc Shift). Nhấn Delete để bỏ phím tắt.</p>
+  </section>
+
+  <section>
+    <h2>Bong bóng từng nhóm và từng người</h2>
+    <label class="check"><input type="checkbox" id="groupBubbles"><span><b>Nhóm chat vừa @tag bạn</b> – chấm cam @ báo số lần bị tag</span></label>
+    <label class="check"><input type="checkbox" id="peopleBubbles"><span><b>Người nhắn riêng cho bạn</b> – số đỏ báo số tin mới</span></label>
+    <label class="check"><input type="checkbox" id="useAvatars"><span>Hiện <b>ảnh đại diện</b> (lấy từ thông báo Zalo). Không có ảnh thì hiện chữ viết tắt.</span></label>
+    <label class="check"><input type="checkbox" id="hideReadBubbles"><span><b>Ẩn bong bóng khi đã đọc.</b> Bỏ tích = đọc xong vẫn giữ bong bóng, chỉ mất số (bong bóng tự ẩn theo thời gian bên dưới).</span></label>
+    <label class="field" for="groupMax">Tổng số bong bóng tối đa</label>
+    <select id="groupMax">
+      <option value="3">3 bong bóng</option>
+      <option value="5">5 bong bóng</option>
+      <option value="8">8 bong bóng</option>
+    </select>
+    <label class="field" for="groupAutoHide">Tự ẩn bong bóng khi không có tag mới sau</label>
+    <select id="groupAutoHide">
+      <option value="30">30 phút</option>
+      <option value="60">1 giờ</option>
+      <option value="120">2 giờ</option>
+      <option value="240">4 giờ</option>
+      <option value="0">Không tự ẩn</option>
+    </select>
+    <p class="help">Bong bóng đã ghim (chuột phải → Ghim) luôn hiện, không tự ẩn. Bong bóng nhóm có thêm biểu tượng hai người ở góc dưới.</p>
+  </section>
+
+  <section>
+    <h2>Hình bong bóng chính</h2>
+    <p class="help" style="margin: 0 0 8px">Bấm chọn một hình rồi bấm <b>Lưu</b>. Hình có nhãn <b>ĐỘNG</b> là ảnh chuyển động.</p>
+    <div id="gallery" class="gallery" role="radiogroup" aria-label="Hình bong bóng chính"></div>
+    <div style="display: flex; gap: 8px; margin-top: 10px">
+      <input type="text" id="bubbleImagePath" placeholder="Chưa chọn ảnh/GIF của bạn" readonly>
+      <button id="browseBubble" type="button" class="small">Chọn ảnh/GIF…</button>
+    </div>
+    <p class="help" id="bubbleErr" style="color: #B42318"></p>
+    <p class="help">Hỗ trợ PNG, JPG, GIF động, WebP (tối đa 5 MB). Nên dùng ảnh vuông, ảnh sẽ được cắt tròn.</p>
+    <label class="check"><input type="checkbox" id="bubbleFree"><span><b>Giữ nguyên hình</b> – không cắt tròn, không viền. Ảnh PNG đã tách nền sẽ giữ nền trong suốt, chỉ thấy chủ thể.</span></label>
+    <label class="check"><input type="checkbox" id="bubbleRemoveBg"><span><b>Tự xóa nền</b> – làm trong suốt nền trắng / nền một màu bao quanh hình (dùng cho ảnh và GIF chưa tách nền). Tự bật "Giữ nguyên hình".</span></label>
+    <p class="help" id="alphaHint"></p>
+    <label class="field" for="bubbleSize">Kích thước bong bóng chính: <span id="sizeVal">60</span> px</label>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <span class="help" style="margin: 0">Nhỏ</span>
+      <input type="range" id="bubbleSize" min="40" max="160" step="4" value="60" style="flex: 1; accent-color: #0A5BD6">
+      <span class="help" style="margin: 0">Lớn</span>
+    </div>
+    <label class="field" for="bubbleAnimate">Ảnh động (GIF)</label>
+    <select id="bubbleAnimate">
+      <option value="always">Luôn chuyển động</option>
+      <option value="onNew">Chỉ chuyển động khi có tin mới (bình thường đứng yên)</option>
+    </select>
+  </section>
+
+  <section>
+    <h2>Ứng dụng Zalo PC (nút Mở rộng)</h2>
+    <label class="field" for="zaloPcPath">Đường dẫn Zalo PC</label>
+    <div style="display: flex; gap: 8px">
+      <input type="text" id="zaloPcPath" placeholder="Để trống để app tự tìm">
+      <button id="browse" type="button" class="small">Chọn…</button>
+    </div>
+    <p class="help" id="found"></p>
+  </section>
+
+  <section>
+    <h2>Khác</h2>
+    <label class="check"><input type="checkbox" id="mainOpensHome"><span>Bấm bong bóng chính thì <b>về trang chủ Zalo</b> (danh sách hội thoại) nếu trước đó đang mở nhóm/người từ bong bóng nhỏ</span></label>
+    <label class="check"><input type="checkbox" id="pinChat"><span>Giữ khung chat luôn mở khi bấm ra ngoài</span></label>
+    <label class="check"><input type="checkbox" id="autoStart"><span>Khởi động cùng Windows</span></label>
+  </section>
+</main>
+<footer>
+  <span id="msg" role="status"></span>
+  <button id="close" type="button">Đóng</button>
+  <button id="save" type="button">Lưu</button>
+</footer>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const msg = $('msg');
+
+  function recorder(input) {
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      if (e.key === 'Delete' || e.key === 'Backspace') { input.value = ''; return; }
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+      const parts = [];
+      if (e.ctrlKey) parts.push('Control');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+      if (!parts.length) return;
+      let key = e.key;
+      if (e.code.startsWith('Key')) key = e.code.slice(3);
+      else if (e.code.startsWith('Digit')) key = e.code.slice(5);
+      else if (/^F\d{1,2}$/.test(e.key)) key = e.key;
+      else if (key.length === 1) key = key.toUpperCase();
+      parts.push(key);
+      input.value = parts.join('+');
+    });
+  }
+  recorder($('hotkeyCapture'));
+  recorder($('hotkeyToggle'));
+  recorder($('hotkeyExcel'));
+
+  // ----- Thư viện hình bong bóng -----
+  let choice = { style: 'logo', preset: '' };
+  let gallery = null;
+  function tile(label, imgEl, selected, onPick, animated) {
+    const t = document.createElement('button');
+    t.type = 'button'; t.className = 'tile';
+    t.setAttribute('role', 'radio');
+    t.setAttribute('aria-checked', selected ? 'true' : 'false');
+    t.appendChild(imgEl);
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = label; t.appendChild(nm);
+    if (animated) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = 'ĐỘNG'; t.appendChild(tg); }
+    t.onclick = () => { onPick(); buildGallery(); };
+    return t;
+  }
+  function thumb(url, extra) {
+    if (url) { const i = document.createElement('img'); i.className = 'th'; i.alt = ''; i.src = url; return i; }
+    const d = document.createElement('span'); d.className = 'th ' + (extra || 'empty');
+    if (extra === 'classic') d.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"></path></svg>';
+    else d.textContent = '+';
+    return d;
+  }
+  async function buildGallery() {
+    if (!gallery) gallery = await app.invoke('settings:bubble-gallery');
+    const g = $('gallery');
+    g.textContent = '';
+    g.appendChild(tile('Logo Zalo', thumb(gallery.logo), choice.style === 'logo', () => { choice = { style: 'logo', preset: '' }; }));
+    g.appendChild(tile('Xanh (kiểu cũ)', thumb('', 'classic'), choice.style === 'classic', () => { choice = { style: 'classic', preset: '' }; }));
+    gallery.presets.forEach((p) => {
+      g.appendChild(tile(p.name, thumb(p.url), choice.style === 'preset' && choice.preset === p.id,
+        () => { choice = { style: 'preset', preset: p.id }; }, p.animated));
+    });
+    const c = gallery.custom;
+    g.appendChild(tile('Ảnh/GIF của bạn', thumb(c && c.url), choice.style === 'custom', () => {
+      if (!$('bubbleImagePath').value) { $('browseBubble').click(); return; }
+      choice = { style: 'custom', preset: '' };
+    }, c && c.animated));
+  }
+
+  app.invoke('settings:get').then((s) => {
+    $('myName').value = s.myName || '';
+    $('tagKeywords').value = s.tagKeywords || '';
+    $('priorityNames').value = s.priorityNames || '';
+    $('hidePreview').checked = !!s.hidePreview;
+    $('muted').checked = !!s.muted;
+    $('pinChat').checked = !!s.pinChat;
+    $('autoStart').checked = !!s.autoStart;
+    $('hotkeyCapture').value = s.hotkeyCapture || '';
+    $('hotkeyToggle').value = s.hotkeyToggle || '';
+    $('hotkeyExcel').value = s.hotkeyExcel || '';
+    $('zaloPcPath').value = s.zaloPcPath || '';
+    $('bubbleImagePath').value = s.bubbleImagePath || '';
+    $('groupBubbles').checked = s.groupBubbles !== false;
+    $('peopleBubbles').checked = s.peopleBubbles !== false;
+    $('useAvatars').checked = s.useAvatars !== false;
+    $('mainOpensHome').checked = s.mainOpensHome !== false;
+    $('hideReadBubbles').checked = !!s.hideReadBubbles;
+    $('groupMax').value = String(s.groupMax || 5);
+    $('groupAutoHide').value = String(s.groupAutoHide == null ? 120 : s.groupAutoHide);
+    $('bubbleAnimate').value = s.bubbleAnimate === 'onNew' ? 'onNew' : 'always';
+    $('bubbleFree').checked = s.bubbleShape === 'free';
+    $('bubbleRemoveBg').checked = !!s.bubbleRemoveBg;
+    $('bubbleSize').value = String(s.bubbleSize || 60);
+    $('sizeVal').textContent = String(s.bubbleSize || 60);
+    choice = { style: s.bubbleStyle || 'logo', preset: s.bubblePreset || '' };
+    buildGallery();
+    $('found').textContent = s.zaloPcFound ? 'Đang dùng: ' + s.zaloPcFound : 'Chưa tìm thấy Zalo PC. Bấm Chọn… để chỉ tới file Zalo.exe hoặc shortcut Zalo.';
+    const r = document.querySelector('input[name=mode][value="' + (s.notifyMode || 'tag') + '"]');
+    if (r) r.checked = true;
+  });
+
+  $('save').onclick = async () => {
+    const mode = document.querySelector('input[name=mode]:checked');
+    const res = await app.invoke('settings:save', {
+      myName: $('myName').value,
+      notifyMode: mode ? mode.value : 'tag',
+      tagKeywords: $('tagKeywords').value,
+      priorityNames: $('priorityNames').value,
+      hidePreview: $('hidePreview').checked,
+      muted: $('muted').checked,
+      pinChat: $('pinChat').checked,
+      autoStart: $('autoStart').checked,
+      hotkeyCapture: $('hotkeyCapture').value,
+      hotkeyToggle: $('hotkeyToggle').value,
+      hotkeyExcel: $('hotkeyExcel').value,
+      zaloPcPath: $('zaloPcPath').value,
+      bubbleStyle: choice.style,
+      bubblePreset: choice.preset,
+      bubbleImagePath: $('bubbleImagePath').value,
+      bubbleAnimate: $('bubbleAnimate').value,
+      bubbleShape: ($('bubbleFree').checked || $('bubbleRemoveBg').checked) ? 'free' : 'circle',
+      bubbleRemoveBg: $('bubbleRemoveBg').checked,
+      bubbleSize: Number($('bubbleSize').value),
+      groupBubbles: $('groupBubbles').checked,
+      peopleBubbles: $('peopleBubbles').checked,
+      useAvatars: $('useAvatars').checked,
+      mainOpensHome: $('mainOpensHome').checked,
+      hideReadBubbles: $('hideReadBubbles').checked,
+      groupMax: Number($('groupMax').value),
+      groupAutoHide: Number($('groupAutoHide').value)
+    });
+    if (res.ok) { msg.className = 'ok'; msg.textContent = 'Đã lưu cài đặt.'; }
+    else { msg.className = 'err'; msg.textContent = 'Đã lưu, nhưng phím tắt bị trùng với app khác: ' + res.errors.join(', ') + '. Hãy chọn tổ hợp khác.'; }
+  };
+  $('bubbleRemoveBg').addEventListener('change', () => { if ($('bubbleRemoveBg').checked) $('bubbleFree').checked = true; });
+  $('bubbleSize').addEventListener('input', () => { $('sizeVal').textContent = $('bubbleSize').value; });
+  $('browseBubble').onclick = async () => {
+    const r = await app.invoke('settings:browse-bubble');
+    $('bubbleErr').textContent = r.error || '';
+    if (r.path) {
+      $('bubbleImagePath').value = r.path;
+      if (!gallery) gallery = await app.invoke('settings:bubble-gallery');
+      gallery.custom = { url: r.url, animated: r.animated };
+      choice = { style: 'custom', preset: '' };
+      // Ảnh của bạn: mặc định không cắt tròn. Chưa có nền trong suốt thì bật luôn "Tự xóa nền".
+      $('bubbleFree').checked = true;
+      $('bubbleRemoveBg').checked = !r.hasAlpha;
+      $('alphaHint').textContent = r.hasAlpha
+        ? 'Ảnh đã có nền trong suốt – sẽ chỉ hiện chủ thể.'
+        : 'Ảnh chưa tách nền – đã bật "Tự xóa nền". Bấm Lưu để áp dụng.';
+      buildGallery();
+    }
+  };
+  $('browse').onclick = async () => {
+    const p = await app.invoke('settings:browse-zalo');
+    if (p) { $('zaloPcPath').value = p; $('found').textContent = 'Đang dùng: ' + p; }
+  };
+  $('close').onclick = () => app.send('settings:close');
+</script>
+</body>
+</html>
