@@ -21,7 +21,7 @@ function isAllowedZaloPermission(wc, expectedContents, permission, origin, detai
 function isSafeExternalUrl(value) {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port && url.href.length <= 2048;
   } catch (_) { return false; }
 }
 module.exports = { isZaloOrigin, isAllowedZaloPermission, isSafeExternalUrl };
