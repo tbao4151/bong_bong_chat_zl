@@ -35,12 +35,6 @@
     <span style="font-weight: 800; font-size: 17px; line-height: 1">@</span>
     <span id="menBadge" hidden style="position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #FF8A3D; color: #1B2229; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center"></span>
   </button>
-  <button id="xls" aria-label="Gửi vùng Excel vừa copy" title="Gửi vùng Excel vừa copy">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M3 15h18M9 4v16M15 4v16"></path></svg>
-  </button>
-  <button id="cap" aria-label="Chụp màn hình nhanh" title="Chụp màn hình nhanh">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"></path><circle cx="12" cy="12" r="3"></circle></svg>
-  </button>
   <button id="pin" aria-label="Giữ khung chat luôn mở" title="Giữ khung chat luôn mở">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 3h6l-1 6 3 4H7l3-4z"></path></svg>
   </button>
@@ -58,17 +52,14 @@
 <script>
   const status = document.getElementById('status');
   const pin = document.getElementById('pin');
-  const cap = document.getElementById('cap');
   let base = '';
   let toastTimer = null;
 
   document.getElementById('min').onclick = () => app.send('shell:min');
-  document.getElementById('xls').onclick = () => app.send('shell:excel');
   document.getElementById('men').onclick = () => app.send('shell:mentions');
   document.getElementById('expand').onclick = () => app.send('shell:expand');
   document.getElementById('more').onclick = () => app.send('shell:menu');
   pin.onclick = () => app.send('shell:pin');
-  cap.onclick = () => app.send('shell:capture');
 
   const MODE = { tag: 'Chỉ báo khi được tag', all: 'Báo mọi tin nhắn', off: 'Đã tắt thông báo' };
 
@@ -82,8 +73,6 @@
     document.getElementById('men').setAttribute('aria-label', 'Tin nhắc tên tôi' + (s.mentions ? ', ' + s.mentions + ' chưa xem' : ''));
     pin.classList.toggle('on', !!s.pinned);
     pin.setAttribute('aria-pressed', s.pinned ? 'true' : 'false');
-    cap.title = 'Chụp màn hình nhanh' + (s.captureKey ? ' (' + s.captureKey + ')' : '');
-    document.getElementById('xls').title = 'Gửi vùng Excel vừa copy' + (s.excelKey ? ' (' + s.excelKey + ')' : '');
   });
 
   app.on('shell:toast', (t) => {

@@ -4,25 +4,28 @@
  * - Bong bóng kéo thả, tự hút mép, số tin chưa đọc
  * - Bấm để bung khung chat (bên trong là Zalo Web)
  * - Chỉ báo khi được @tag tên (hoặc người/nhóm ưu tiên)
- * - Chụp màn hình nhanh (Ctrl+Alt+S) rồi dán thẳng vào khung chat
+ * - Chỉ mở hội thoại Zalo, không có quyền chụp màn hình hoặc đọc clipboard
  * - Hộp "Tin nhắc tên tôi": danh sách các lần được tag, bấm để mở đúng hội thoại
- * - Bảng vẽ ghi chú lên ảnh trước khi gửi (mũi tên, khung, khoanh, bút, chữ)
- * - Gửi vùng Excel vừa copy thành ảnh (Ctrl+Alt+E)
  * - Bong bóng riêng cho từng nhóm chat vừa @tag bạn và từng người nhắn riêng
  */
 const {
   app, BrowserWindow, WebContentsView, ipcMain, screen, Menu, Tray, Notification,
-  globalShortcut, desktopCapturer, clipboard, session, shell, nativeImage, dialog
+  globalShortcut, session, shell, nativeImage, dialog
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const cfg = require('./config');
 const mentions = require('./mentions');
-const privates = require('./privates');
+const inbox = require('./inbox').createInbox();
+const security = require('./security');
 const icons = require('./icons');
 const navigate = require('./navigate');
 
-const APP_ID = 'vn.bachtung.zalobongbong';
+const APP_ID = 'vn.bachtung.zalobongbong.secure';
+// Isolated profile: do not reuse cookies/settings from the original unreviewed app.
+// Keep this path stable between future security releases.
+app.setPath('userData', path.join(app.getPath('appData'), 'Zalo Bong Bong Secure'));
+
 const ZALO_URL = 'https://chat.zalo.me/';
 const ZALO_HOST = /^https:\/\/([a-z0-9-]+\.)*zalo\.me(\/|$)/i;
 const BUBBLE_PAD = 18;  // chừa chỗ quanh hình cho số đỏ, chấm @ và viền nhấp nháy
@@ -39,9 +42,9 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 
 let settings = null;
-let bubbleWin = null, chatWin = null, zaloView = null, captureWin = null, settingsWin = null, mentionsWin = null, editorWin = null, stackWin = null, tray = null;
+let bubbleWin = null, chatWin = null, zaloView = null, settingsWin = null, mentionsWin = null, stackWin = null, tray = null;
 let unread = 0, alerting = false, chatOpen = false, capturing = false;
-let dragOffset = null, captureImage = null, captureDisplay = null;
+let dragOffset = null;
 app.isQuitting = false;
 
 const uiPrefs = () => ({
@@ -63,6 +66,7 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 
 function init() {
   settings = cfg.load();
+  purgeLegacyNotificationFiles();
   if (Array.isArray(settings.pinnedGroups)) {   // chuyển ghim từ bản 1.4
     const old = settings.pinnedGroups.map((n) => 'g:' + n);
     settings.pinnedBubbles = [...new Set([...(settings.pinnedBubbles || []), ...old])];
@@ -87,6 +91,13 @@ function init() {
       openChat();
       toast('Quét mã QR để đăng nhập. Sau đó bấm ⋯ → Cài đặt để nhập tên Zalo của bạn.', 15000);
     }, 900);
+  }
+}
+
+// Remove legacy plaintext previews while preserving the persistent Zalo session.
+function purgeLegacyNotificationFiles() {
+  for (const name of ['nhac-ten.json', 'tin-rieng.json', 'anh-dai-dien.json']) {
+    try { fs.rmSync(path.join(app.getPath('userData'), name), { force: true }); } catch (_) {}
   }
 }
 
@@ -264,15 +275,15 @@ ipcMain.on('bubble:drag-move', (e) => {
   if (chatOpen) placeChat();
   updateStack();
 });
-ipcMain.on('bubble:drag-end', () => { dragOffset = null; snapBubble(); });
+ipcMain.on('bubble:drag-end', (e) => { if (e.sender !== bubbleWin.webContents) return; dragOffset = null; snapBubble(); });
 // Bấm bong bóng chính: mở khung chat ở trang chủ (nếu bật trong Cài đặt)
 function mainBubbleToggle() {
   const opening = !chatOpen;
   toggleChat();
   if (opening && settings.mainOpensHome) goHome(false);
 }
-ipcMain.on('bubble:click', () => mainBubbleToggle());
-ipcMain.on('bubble:menu', () => buildMenu().popup({ window: bubbleWin }));
+ipcMain.on('bubble:click', (e) => { if (e.sender === bubbleWin.webContents) mainBubbleToggle(); });
+ipcMain.on('bubble:menu', (e) => { if (e.sender === bubbleWin.webContents) buildMenu().popup({ window: bubbleWin }); });
 
 /* ---------------- Khung chat (Zalo Web) ---------------- */
 
@@ -295,9 +306,13 @@ function createChat() {
 
   const ses = session.fromPartition('persist:zalo');
   ses.setUserAgent(chromeUA());
-  const allowed = ['notifications', 'media', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen'];
-  ses.setPermissionRequestHandler((_wc, perm, cb) => cb(allowed.includes(perm)));
-  ses.setPermissionCheckHandler((_wc, perm) => allowed.includes(perm));
+  // Deny camera, microphone, screen and clipboard-read by default.
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    const origin = details && details.requestingUrl;
+    callback(security.isAllowedZaloPermission(wc, zaloView && zaloView.webContents, permission, origin, details));
+  });
+  ses.setPermissionCheckHandler((wc, permission, requestingOrigin, details) =>
+    security.isAllowedZaloPermission(wc, zaloView && zaloView.webContents, permission, requestingOrigin, details));
 
   zaloView = new WebContentsView({
     webPreferences: {
@@ -327,13 +342,33 @@ function createChat() {
   const wc = zaloView.webContents;
   wc.on('page-title-updated', (_e, title) => updateUnread(title));
   wc.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
+    // Never pass untrusted links to the operating system without approval.
+    void confirmExternalLink(url);
     return { action: 'deny' };
   });
   wc.on('will-navigate', (e, url) => {
-    if (!ZALO_HOST.test(url)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+    if (!ZALO_HOST.test(url)) {
+      e.preventDefault();
+      void confirmExternalLink(url);
+    }
   });
   wc.loadURL(ZALO_URL);
+}
+
+async function confirmExternalLink(url) {
+  if (!security.isSafeExternalUrl(url)) return;
+  const hostname = new URL(url).hostname;
+  const { response } = await dialog.showMessageBox(chatWin, {
+    type: 'question',
+    title: 'Mở liên kết bên ngoài',
+    message: 'Mở website bên ngoài Zalo?',
+    detail: 'Tên miền: ' + hostname + '\\nChỉ tiếp tục nếu bạn tin tưởng liên kết này.',
+    buttons: ['Hủy', 'Mở bằng trình duyệt'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  });
+  if (response === 1) await shell.openExternal(url);
 }
 
 function layoutZalo() {
@@ -413,12 +448,12 @@ function onChatBlur() {
   }, 200);
 }
 
-ipcMain.on('shell:min', () => hideChat());
-ipcMain.on('shell:pin', () => { settings.pinChat = !settings.pinChat; cfg.save(settings); pushState(); });
-ipcMain.on('shell:capture', () => setTimeout(startCapture, 120));
-ipcMain.on('shell:reload', () => zaloView && zaloView.webContents.reload());
-ipcMain.on('shell:menu', () => buildMenu().popup({ window: chatWin }));
-ipcMain.on('shell:expand', () => openZaloPc());
+const fromShell = (e) => chatWin && e.sender === chatWin.webContents;
+ipcMain.on('shell:min', (e) => { if (fromShell(e)) hideChat(); });
+ipcMain.on('shell:pin', (e) => { if (!fromShell(e)) return; settings.pinChat = !settings.pinChat; cfg.save(settings); pushState(); });
+ipcMain.on('shell:reload', (e) => { if (fromShell(e) && zaloView) zaloView.webContents.reload(); });
+ipcMain.on('shell:menu', (e) => { if (fromShell(e)) buildMenu().popup({ window: chatWin }); });
+ipcMain.on('shell:expand', (e) => { if (fromShell(e)) openZaloPc(); });
 
 /* ---------------- Mở rộng: mở ứng dụng Zalo PC ---------------- */
 
@@ -505,8 +540,9 @@ function updateUnread(title) {
 }
 
 function markEverythingRead() {
+  inbox.markAll();
   mentions.markAll();
-  privates.markAll();
+  updateStack();
 }
 
 function norm(s) { return String(s || '').toLowerCase(); }
@@ -525,7 +561,7 @@ function isPriority(text) {
 }
 
 ipcMain.on('zalo:notify', (e, d) => {
-  if (!zaloView || e.sender !== zaloView.webContents) return;
+  if (!zaloView || e.sender !== zaloView.webContents || !security.isZaloOrigin(e.sender.getURL())) return;
   handleZaloNotification(String((d && d.title) || ''), String((d && d.body) || ''), String((d && d.nid) || ''), String((d && d.icon) || ''));
 });
 
@@ -541,8 +577,15 @@ async function resolveIcon(src) {
   try {
     if (/^data:image\//i.test(src)) img = nativeImage.createFromDataURL(src);
     else if (/^https:\/\//i.test(src)) {
-      const res = await session.fromPartition('persist:zalo').fetch(src);
-      if (res.ok) img = nativeImage.createFromBuffer(Buffer.from(await res.arrayBuffer()));
+      // Only fetch avatars from Zalo-owned domains, with a strict size limit.
+      const host = new URL(src).hostname.toLowerCase();
+      if (!/(^|\.)(zalo\.me|zadn\.vn)$/.test(host)) return '';
+      const res = await session.fromPartition('persist:zalo').fetch(src, { signal: AbortSignal.timeout(5000) });
+      const len = Number(res.headers.get('content-length') || 0);
+      if (!res.ok || (len && len > 2 * 1024 * 1024)) return '';
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2 * 1024 * 1024) return '';
+      img = nativeImage.createFromBuffer(buf);
     }
   } catch (e) { img = null; }
   if (!img || img.isEmpty()) return '';
@@ -558,7 +601,7 @@ function rememberIcon(key, src) {
 }
 
 ipcMain.on('zalo:icon', (e, d) => {
-  if (!zaloView || e.sender !== zaloView.webContents || !d) return;
+  if (!zaloView || e.sender !== zaloView.webContents || !security.isZaloOrigin(e.sender.getURL()) || !d) return;
   const key = nidKey.get(String(d.nid || ''));
   if (key) rememberIcon(key, String(d.data || ''));
 });
@@ -572,14 +615,14 @@ function handleZaloNotification(title, body, nid, icon) {
   const tagged = isTagged(text);
   const prio = isPriority(text);
   if (tagged && (settings.myName || (settings.tagKeywords || []).length)) {
-    mentions.add(title, body, nid);   // luôn ghi lại, kể cả khi đang tắt thông báo
-    pushState();
+    mentions.add(title, body, nid); // transient, not saved to disk
   }
   const parsed = mentions.parse(title, body);
-  if (!parsed.group && !(chatOpen && chatWin.isFocused())) {
-    privates.add(parsed.sender, parsed.text, nid);   // tin nhắn riêng -> bong bóng từng người
-    pushState();
+  // Every incoming notification creates a bubble, not only @mentions.
+  if (!(chatOpen && chatWin.isFocused())) {
+    inbox.add({ group: parsed.group, sender: parsed.sender, text: parsed.text, nid, tagged });
   }
+  pushState();
   let show = false;
   if (settings.notifyMode === 'all') show = true;
   else if (settings.notifyMode === 'tag') show = tagged || prio || (!settings.myName && tagKeys().length === 0);
@@ -679,7 +722,11 @@ function closeMentions() { if (mentionsWin && !mentionsWin.isDestroyed()) mentio
 
 const fromMentions = (e) => mentionsWin && !mentionsWin.isDestroyed() && e.sender === mentionsWin.webContents;
 
-ipcMain.handle('mentions:list', () => ({ items: mentions.list(), hasName: !!settings.myName }));
+ipcMain.handle('mentions:list', (e) => {
+  if (!mentionsWin || e.sender !== mentionsWin.webContents) throw new Error('forbidden');
+  const items = mentions.list().map((m) => settings.hidePreview ? { ...m, text: '' } : m);
+  return { items, hasName: !!settings.myName };
+});
 ipcMain.on('mentions:open', (e, id) => {
   if (!fromMentions(e)) return;
   const m = mentions.markSeen(String(id || ''));
@@ -691,8 +738,8 @@ ipcMain.on('mentions:seen-all', (e) => { if (fromMentions(e)) { mentions.markAll
 ipcMain.on('mentions:clear', (e) => { if (fromMentions(e)) { mentions.clear(); pushState(); } });
 ipcMain.on('mentions:close', (e) => { if (fromMentions(e)) closeMentions(); });
 ipcMain.on('mentions:settings', (e) => { if (fromMentions(e)) { closeMentions(); openSettings(); } });
-ipcMain.on('shell:mentions', () => openMentions());
-ipcMain.on('bubble:mentions', () => openMentions());
+ipcMain.on('shell:mentions', (e) => { if (fromShell(e)) openMentions(); });
+ipcMain.on('bubble:mentions', (e) => { if (e.sender === bubbleWin.webContents) openMentions(); });
 
 /* ---------------- Bong bóng từng nhóm có tag bạn & từng người nhắn riêng ---------------- */
 
@@ -723,7 +770,7 @@ function createStack() {
 function pinnedSet() { return new Set(settings.pinnedBubbles || []); }
 
 function blank(kind, name) {
-  return { key: kind + ':' + name, kind, name, count: 0, total: 0, lastAt: 0, lastNid: '', lastSender: '', lastText: '' };
+  return { key: kind + ':' + name, kind, name, count: 0, total: 0, lastAt: 0, lastNid: '', lastSender: '', lastText: '', tagged: false };
 }
 
 function bubbleList() {
@@ -732,24 +779,11 @@ function bubbleList() {
   const pinned = pinnedSet();
   const map = new Map();
 
-  if (settings.groupBubbles) {
-    mentions.list().forEach((m) => {
-      if (!m.group) return;
-      const key = 'g:' + m.group;
-      let g = map.get(key);
-      if (!g) { g = blank('g', m.group); map.set(key, g); }
-      if (m.at > g.lastAt) { g.lastAt = m.at; g.lastNid = m.nid; g.lastSender = m.sender; g.lastText = m.text; }
-      if (!m.seen) g.count++;
-      g.total++;
-    });
-  }
-  if (settings.peopleBubbles) {
-    privates.list().forEach((p) => {
-      const it = blank('p', p.name);
-      it.count = p.count; it.total = 1; it.lastAt = p.lastAt; it.lastNid = p.lastNid; it.lastText = p.lastText;
-      map.set(it.key, it);
-    });
-  }
+  inbox.list().forEach((item) => {
+    if (item.kind === 'g' && !settings.groupBubbles) return;
+    if (item.kind === 'p' && !settings.peopleBubbles) return;
+    map.set(item.key, item);
+  });
   pinned.forEach((key) => {
     const kind = key.slice(0, 1), name = key.slice(2);
     if ((kind === 'g' && !settings.groupBubbles) || (kind === 'p' && !settings.peopleBubbles)) return;
@@ -790,7 +824,8 @@ function updateStack() {
     groups: stackItems.map((it) => ({
       key: it.key, kind: it.kind, name: it.name, count: it.count, total: it.total, pinned: it.pinned,
       avatar: settings.useAvatars ? icons.get(it.key) : '',
-      sender: it.lastSender, text: it.lastText, at: it.lastAt, fresh: it.count > 0 && now - it.lastAt < 15000
+      sender: it.lastSender, text: settings.hidePreview ? '' : it.lastText,
+      tagged: !!it.tagged, at: it.lastAt, fresh: it.count > 0 && now - it.lastAt < 15000
     }))
   };
   const key = JSON.stringify(payload);
@@ -809,7 +844,8 @@ function openBubble(key) {
   if (chatOpen && openedKey === key) { hideChat(); return; }
   const it = findItem(key);
   const kind = key.slice(0, 1), name = key.slice(2);
-  if (kind === 'g') mentions.markGroupSeen(name); else privates.markSeen(name);
+  inbox.markSeen(key);
+  if (kind === 'g') mentions.markGroupSeen(name);
   pushState();
   openChatAt(it ? it.lastNid : '', name);
   openedKey = key;
@@ -851,7 +887,8 @@ function bubbleMenu(key) {
     { label: (kind === 'g' ? 'Mở nhóm "' : 'Mở chat với "') + name + '"', click: () => openBubble(key) },
     { label: pinned ? 'Bỏ ghim bong bóng' : 'Ghim bong bóng (không tự ẩn)', click: () => togglePinBubble(key) },
     { label: 'Đánh dấu đã đọc', click: () => {
-      if (kind === 'g') mentions.markGroupSeen(name); else privates.markSeen(name);
+      inbox.markSeen(key);
+      if (kind === 'g') mentions.markGroupSeen(name);
       pushState();
     } },
     { label: 'Đóng bong bóng này', click: () => dismissBubble(key) },
@@ -874,197 +911,6 @@ ipcMain.on('stack:open', (e, key) => { if (fromStack(e)) openBubble(String(key |
 ipcMain.on('stack:menu', (e, key) => { if (fromStack(e)) bubbleMenu(String(key || '')).popup({ window: bubbleWin }); });
 ipcMain.on('stack:close-all', (e) => { if (fromStack(e)) dismissAllBubbles(); });
 
-/* ---------------- Chụp màn hình nhanh ---------------- */
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function startCapture() {
-  if (capturing) return;
-  capturing = true;
-  if (chatWin) chatWin.hide();
-  if (bubbleWin) bubbleWin.hide();
-  if (stackWin) stackWin.hide();
-  await sleep(250);
-  try {
-    const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const sf = d.scaleFactor || 1;
-    const size = { width: Math.round(d.bounds.width * sf), height: Math.round(d.bounds.height * sf) };
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
-    const src = sources.find((s) => String(s.display_id) === String(d.id)) || sources[0];
-    if (!src || src.thumbnail.isEmpty()) throw new Error('no-source');
-    captureImage = src.thumbnail;
-    captureDisplay = d;
-
-    captureWin = new BrowserWindow({
-      x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height,
-      frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
-      fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, enableLargerThanScreen: true,
-      show: false, backgroundColor: '#000000', webPreferences: uiPrefs()
-    });
-    captureWin.setAlwaysOnTop(true, 'screen-saver');
-    captureWin.loadFile(path.join(UI, 'capture.html'));
-    captureWin.webContents.once('did-finish-load', () => {
-      const jpg = 'data:image/jpeg;base64,' + captureImage.toJPEG(90).toString('base64');
-      captureWin.webContents.send('capture:image', jpg);
-    });
-    captureWin.once('ready-to-show', () => {
-      captureWin.setBounds(d.bounds);
-      captureWin.show();
-      captureWin.focus();
-    });
-    captureWin.on('closed', () => { captureWin = null; if (capturing) finishCapture(false); });
-  } catch (err) {
-    finishCapture(false);
-  }
-}
-
-ipcMain.on('capture:done', (e, r) => {
-  if (!captureWin || e.sender !== captureWin.webContents || !captureImage || !captureDisplay) return finishCapture(false);
-  const ratio = captureImage.getSize().width / captureDisplay.bounds.width;
-  const img = captureImage.getSize();
-  const rect = {
-    x: Math.max(0, Math.round(r.x * ratio)),
-    y: Math.max(0, Math.round(r.y * ratio)),
-    width: Math.round(r.w * ratio),
-    height: Math.round(r.h * ratio)
-  };
-  rect.width = Math.min(rect.width, img.width - rect.x);
-  rect.height = Math.min(rect.height, img.height - rect.y);
-  if (rect.width < 4 || rect.height < 4) return finishCapture(false);
-  const cropped = captureImage.crop(rect);
-  const sf = captureDisplay.scaleFactor || 1;
-  finishCapture(false);
-  openEditor(cropped, sf, 'Ảnh chụp màn hình');
-});
-
-ipcMain.on('capture:cancel', () => finishCapture(false));
-
-function finishCapture() {
-  if (!capturing) return;
-  capturing = false;
-  if (captureWin && !captureWin.isDestroyed()) captureWin.close();
-  captureImage = null;
-  captureDisplay = null;
-  if (bubbleWin) bubbleWin.showInactive();
-  updateStack();
-}
-
-// Dán ảnh đang có trong bộ nhớ tạm vào khung chat
-function pasteImageToChat() {
-  openChat();
-  setTimeout(() => {
-    zaloView.webContents.focus();
-    zaloView.webContents.paste();
-    toast('Ảnh đã được dán. Nếu chưa thấy, mở đúng hội thoại rồi nhấn Ctrl+V.', 6000);
-  }, 400);
-}
-
-/* ---------------- Bảng vẽ ghi chú ---------------- */
-
-let editorImage = null;
-
-function openEditor(img, scaleFactor, label) {
-  if (!img || img.isEmpty()) return;
-  if (editorWin && !editorWin.isDestroyed()) editorWin.close();
-  editorImage = { url: img.toDataURL(), label: label || 'Ảnh' };
-  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const wa = d.workArea;
-  const size = img.getSize();
-  const sf = scaleFactor || d.scaleFactor || 1;
-  const TOOLBAR = 112;
-  const w = Math.round(Math.min(wa.width * 0.9, Math.max(720, size.width / sf + 48)));
-  const h = Math.round(Math.min(wa.height * 0.9, Math.max(460, size.height / sf + TOOLBAR + 48)));
-  editorWin = new BrowserWindow({
-    x: Math.round(wa.x + (wa.width - w) / 2), y: Math.round(wa.y + (wa.height - h) / 2), width: w, height: h,
-    minWidth: 640, minHeight: 400, title: 'Ghi chú lên ảnh – Zalo Bong Bóng', alwaysOnTop: true,
-    autoHideMenuBar: true, backgroundColor: '#2B343B', show: false,
-    icon: path.join(ASSETS, 'icon.png'), webPreferences: uiPrefs()
-  });
-  editorWin.setMenu(null);
-  editorWin.loadFile(path.join(UI, 'editor.html'));
-  editorWin.webContents.once('did-finish-load', () => {
-    if (editorWin && editorImage) editorWin.webContents.send('editor:image', editorImage);
-  });
-  editorWin.once('ready-to-show', () => { editorWin.show(); editorWin.focus(); });
-  editorWin.on('closed', () => { editorWin = null; editorImage = null; });
-}
-
-const fromEditor = (e) => editorWin && !editorWin.isDestroyed() && e.sender === editorWin.webContents;
-
-function imageFromEditor(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) return null;
-  const img = nativeImage.createFromDataURL(dataUrl);
-  return img.isEmpty() ? null : img;
-}
-
-ipcMain.on('editor:send', (e, dataUrl) => {
-  if (!fromEditor(e)) return;
-  const img = imageFromEditor(dataUrl);
-  if (!img) return;
-  clipboard.writeImage(img);
-  editorWin.close();
-  pasteImageToChat();
-});
-ipcMain.on('editor:copy', (e, dataUrl) => {
-  if (!fromEditor(e)) return;
-  const img = imageFromEditor(dataUrl);
-  if (!img) return;
-  clipboard.writeImage(img);
-  editorWin.close();
-});
-ipcMain.on('editor:cancel', (e) => { if (fromEditor(e)) editorWin.close(); });
-
-/* ---------------- Gửi vùng Excel vừa copy thành ảnh ---------------- */
-
-// Excel thường đặt sẵn ảnh của vùng copy vào bộ nhớ tạm. Nếu không có, vẽ lại bảng từ HTML.
-async function htmlTableToImage(html) {
-  html = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, '');
-  const page = '<!doctype html><html><head><meta charset="utf-8">' +
-    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">' +
-    '<style>html,body{margin:0;background:#fff}#w{display:inline-block;padding:8px;font-family:Calibri,Arial,sans-serif}' +
-    'table{border-collapse:collapse}td,th{border:1px solid #BFBFBF}</style></head><body><div id="w">' + html + '</div></body></html>';
-  const win = new BrowserWindow({
-    show: false, width: 1600, height: 1200, useContentSize: true,
-    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false }
-  });
-  try {
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page));
-    const r = await win.webContents.executeJavaScript(
-      '(() => { const b = document.getElementById("w").getBoundingClientRect(); return { w: Math.ceil(b.width), h: Math.ceil(b.height) }; })()');
-    const w = Math.min(Math.max(r.w, 20), 4000), h = Math.min(Math.max(r.h, 20), 4000);
-    win.setContentSize(w, h);
-    await sleep(300);
-    const img = await win.webContents.capturePage({ x: 0, y: 0, width: w, height: h });
-    return img.isEmpty() ? null : img;
-  } catch (e) {
-    return null;
-  } finally {
-    if (!win.isDestroyed()) win.destroy();
-  }
-}
-
-async function sendExcelRange() {
-  let img = clipboard.readImage();
-  if (img.isEmpty()) {
-    const html = clipboard.readHTML();
-    if (/<table/i.test(html)) img = await htmlTableToImage(html);
-  }
-  if (!img || img.isEmpty()) {
-    dialog.showMessageBox({
-      type: 'info', title: 'Gửi vùng Excel',
-      message: 'Chưa có vùng Excel nào được copy.',
-      detail: 'Bôi đen vùng cần gửi trong Excel, nhấn Ctrl+C, rồi bấm lại nút này (hoặc ' +
-        (prettyKey(settings.hotkeyExcel) || 'phím tắt') + ').',
-      buttons: ['Đã hiểu'], noLink: true
-    });
-    return;
-  }
-  hideChat();
-  openEditor(img, 1, 'Vùng Excel');
-}
-
-ipcMain.on('shell:excel', () => sendExcelRange());
-
 /* ---------------- Menu, khay hệ thống, phím tắt ---------------- */
 
 function prettyKey(acc) { return String(acc || '').replace(/Control/g, 'Ctrl').replace(/CommandOrControl/g, 'Ctrl'); }
@@ -1076,8 +922,6 @@ function buildMenu() {
     { label: chatOpen ? 'Thu gọn khung chat' : 'Mở khung chat', click: toggleChat },
     { label: 'Tin nhắc tên tôi' + (mentions.unseenCount() ? '   (' + mentions.unseenCount() + ' chưa xem)' : ''), click: () => setTimeout(openMentions, 120) },
     { label: 'Mở rộng: mở ứng dụng Zalo PC', click: () => openZaloPc() },
-    { label: 'Gửi vùng Excel vừa copy' + (settings.hotkeyExcel ? '   (' + prettyKey(settings.hotkeyExcel) + ')' : ''), click: () => sendExcelRange() },
-    { label: 'Chụp màn hình nhanh' + (settings.hotkeyCapture ? '   (' + prettyKey(settings.hotkeyCapture) + ')' : ''), click: () => setTimeout(startCapture, 150) },
     { type: 'separator' },
     {
       label: 'Thông báo', submenu: [
@@ -1086,7 +930,7 @@ function buildMenu() {
         { label: 'Tắt thông báo', type: 'radio', checked: settings.notifyMode === 'off', click: () => setMode('off') }
       ]
     },
-    { label: 'Bong bóng nhóm được tag', type: 'checkbox', checked: !!settings.groupBubbles, click: (i) => setBubbleKind('g', i.checked) },
+    { label: 'Bong bóng cho mọi tin nhóm', type: 'checkbox', checked: !!settings.groupBubbles, click: (i) => setBubbleKind('g', i.checked) },
     {
       label: 'Kích thước bong bóng', submenu: [
         { label: 'Nhỏ', type: 'radio', checked: bubbleSize() <= 52, click: () => setBubbleSize(48) },
@@ -1136,9 +980,7 @@ function registerHotkeys() {
     try { ok = globalShortcut.register(acc, fn); } catch (e) { ok = false; }
     if (!ok) errors.push(label + ' (' + prettyKey(acc) + ')');
   };
-  reg(settings.hotkeyCapture, () => startCapture(), 'Chụp màn hình');
   reg(settings.hotkeyToggle, () => mainBubbleToggle(), 'Mở/thu khung chat');
-  reg(settings.hotkeyExcel, () => sendExcelRange(), 'Gửi vùng Excel');
   return errors;
 }
 
@@ -1151,7 +993,7 @@ function applyAutoStart() {
 function pushState() {
   const state = {
     unread, alerting, open: chatOpen, muted: settings.muted, mode: settings.notifyMode,
-    pinned: settings.pinChat, captureKey: prettyKey(settings.hotkeyCapture), excelKey: prettyKey(settings.hotkeyExcel),
+    pinned: settings.pinChat,
     mentions: mentions.unseenCount()
   };
   if (mentionsWin && !mentionsWin.isDestroyed()) mentionsWin.webContents.send('mentions:changed');
@@ -1175,7 +1017,10 @@ function openSettings() {
   settingsWin.on('closed', () => { settingsWin = null; });
 }
 
-ipcMain.handle('settings:get', () => ({
+const fromSettings = (e) => settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
+ipcMain.handle('settings:get', (e) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
+  return ({
   myName: settings.myName,
   notifyMode: settings.notifyMode,
   tagKeywords: (settings.tagKeywords || []).join('\n'),
@@ -1184,9 +1029,7 @@ ipcMain.handle('settings:get', () => ({
   muted: settings.muted,
   pinChat: settings.pinChat,
   autoStart: settings.autoStart,
-  hotkeyCapture: settings.hotkeyCapture,
   hotkeyToggle: settings.hotkeyToggle,
-  hotkeyExcel: settings.hotkeyExcel,
   bubbleStyle: settings.bubbleStyle,
   bubblePreset: settings.bubblePreset,
   bubbleAnimate: settings.bubbleAnimate,
@@ -1203,9 +1046,11 @@ ipcMain.handle('settings:get', () => ({
   bubbleImagePath: settings.bubbleImagePath,
   zaloPcPath: settings.zaloPcPath,
   zaloPcFound: findZaloPc()
-}));
+  });
+});
 
-ipcMain.handle('settings:save', (_e, s) => {
+ipcMain.handle('settings:save', (e, s) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
   s = s || {};
   const lines = (v) => String(v || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 50);
   settings.myName = String(s.myName || '').trim().replace(/^@/, '').slice(0, 80);
@@ -1216,10 +1061,8 @@ ipcMain.handle('settings:save', (_e, s) => {
   settings.muted = !!s.muted;
   settings.pinChat = !!s.pinChat;
   settings.autoStart = !!s.autoStart;
-  settings.hotkeyCapture = String(s.hotkeyCapture || '').trim().slice(0, 40);
   settings.hotkeyToggle = String(s.hotkeyToggle || '').trim().slice(0, 40);
   settings.zaloPcPath = String(s.zaloPcPath || '').trim().slice(0, 500);
-  settings.hotkeyExcel = String(s.hotkeyExcel || '').trim().slice(0, 40);
   settings.bubbleStyle = ['logo', 'classic', 'preset', 'custom'].includes(s.bubbleStyle) ? s.bubbleStyle : 'logo';
   settings.bubblePreset = PRESETS.some((p) => p.id === s.bubblePreset) ? s.bubblePreset : '';
   settings.bubbleImagePath = String(s.bubbleImagePath || '').trim().slice(0, 500);
@@ -1242,8 +1085,9 @@ ipcMain.handle('settings:save', (_e, s) => {
   return { ok: errors.length === 0, errors };
 });
 
-ipcMain.handle('settings:browse-zalo', async () => pickZaloPc(settingsWin));
-ipcMain.handle('settings:browse-bubble', async () => {
+ipcMain.handle('settings:browse-zalo', async (e) => fromSettings(e) ? pickZaloPc(settingsWin) : '');
+ipcMain.handle('settings:browse-bubble', async (e) => {
+  if (!fromSettings(e)) return { path: '' };
   const r = await dialog.showOpenDialog(settingsWin || null, {
     title: 'Chọn ảnh cho bong bóng',
     properties: ['openFile'],
@@ -1256,14 +1100,17 @@ ipcMain.handle('settings:browse-bubble', async () => {
   return { path: p, url: im.url, animated: im.animated, hasAlpha: !!im.hasAlpha };
 });
 
-ipcMain.handle('settings:bubble-gallery', () => ({
+ipcMain.handle('settings:bubble-gallery', (e) => {
+  if (!fromSettings(e)) throw new Error('forbidden');
+  return ({
   logo: (imageFile(path.join(ASSETS, 'bubble-zalo.png')) || {}).url || '',
   presets: PRESETS.map((p) => {
     const im = imageFile(presetFile(p.id)) || {};
     return { id: p.id, name: p.name, url: im.url || '', animated: !!im.animated };
   }),
   custom: settings.bubbleImagePath ? (imageFile(settings.bubbleImagePath) || null) : null
-}));
+  });
+});
 
 ipcMain.on('settings:close', (e) => {
   if (settingsWin && e.sender === settingsWin.webContents) settingsWin.close();

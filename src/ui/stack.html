@@ -22,6 +22,7 @@
   }
   @keyframes ring { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.18); opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .g { transition: none; } .g:hover { transform: none; } .g.fresh::after { animation: none; } }
+  .at.plain { background: #0A5BD6; color: #FFFFFF; }
   .at {
     position: absolute; top: -8px; right: -10px; min-width: 26px; height: 20px; padding: 0 4px; box-sizing: border-box;
     border-radius: 10px; border: 2px solid #FFFFFF; background: #FF8A3D; color: #1B2229;
@@ -110,7 +111,7 @@
       document.getElementById('cTx').textContent = g.text || 'Chưa có tin nhắn gần đây.';
       document.getElementById('cHint').textContent = 'Bấm để mở chat · Chuột phải để ghim/đóng';
     } else {
-      document.getElementById('cBy').textContent = g.sender ? 'Nhóm · Người tag: ' + g.sender + others : (g.pinned ? 'Nhóm đã ghim' : 'Nhóm');
+      document.getElementById('cBy').textContent = g.sender ? (g.tagged ? 'Nhóm · Người tag: ' : 'Nhóm · Người gửi: ') + g.sender + others : (g.pinned ? 'Nhóm đã ghim' : 'Nhóm');
       document.getElementById('cTx').textContent = g.text || (g.total ? '' : 'Chưa có tin nhắc tên gần đây.');
       document.getElementById('cHint').textContent = 'Bấm để mở nhóm · Chuột phải để ghim/đóng';
     }
@@ -132,7 +133,7 @@
       const top = 12 + i * data.step;
       const b = document.createElement('button');
       const isP = g.kind === 'p';
-      b.className = 'g' + (isP ? ' person' : '') + (g.count && !isP ? ' tag' : '') + (g.fresh ? ' fresh' : '');
+      b.className = 'g' + (isP ? ' person' : '') + (g.count && !isP && g.tagged ? ' tag' : '') + (g.fresh ? ' fresh' : '');
       b.style.cssText = 'left:' + colLeft + 'px;top:' + top + 'px;width:' + S + 'px;height:' + S + 'px;background:' + colorOf(g.name);
       b.textContent = initials(g.name);
       if (g.avatar) {
@@ -148,8 +149,8 @@
         : 'Nhóm ' + g.name + (g.count ? ', ' + g.count + ' lần nhắc tên bạn chưa xem' : ''));
       if (g.count) {
         const at = document.createElement('span');
-        at.className = isP ? 'num' : 'at';
-        at.textContent = (isP ? '' : '@') + (g.count > 9 ? '9+' : g.count);
+        at.className = isP ? 'num' : (g.tagged ? 'at' : 'at plain');
+        at.textContent = (!isP && g.tagged ? '@' : '') + (g.count > 9 ? '9+' : g.count);
         b.appendChild(at);
       }
       if (!isP) {

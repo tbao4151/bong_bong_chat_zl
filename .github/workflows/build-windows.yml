@@ -1,0 +1,43 @@
+name: Test and Package Windows
+
+on:
+  push:
+    branches:
+      - main
+      - feature/secure-android-style-bubbles
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install exact locked dependencies
+        shell: pwsh
+        run: npm ci --ignore-scripts
+      - name: Test security policy and chat inbox
+        shell: pwsh
+        run: npm test
+      - name: Audit dependencies
+        shell: pwsh
+        run: npm audit --audit-level=moderate
+      - name: Package portable Windows EXE (no installer)
+        shell: pwsh
+        run: npm run dist
+      - name: Publish portable application folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZaloBongBong-v2.1-portable-unsigned
+          path: |
+            dist/ZaloBongBong-win32-x64/**
+          if-no-files-found: error

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('__zaloBubble', {
 
 function inject() {
   try {
+    // Never instrument authentication or unrelated Zalo subdomains.
+    if (window.location.origin !== 'https://chat.zalo.me') return;
     var bridge = window.__zaloBubble;
     var store = {}, order = [], seq = 0;
 

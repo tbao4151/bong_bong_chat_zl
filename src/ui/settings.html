@@ -75,16 +75,12 @@
     <textarea id="priorityNames" placeholder="Mỗi dòng một tên"></textarea>
     <p class="help">Ví dụ: tên quản đốc, nhóm "Phòng Kế hoạch". Tin từ đây luôn báo dù không tag.</p>
 
-    <label class="check"><input type="checkbox" id="hidePreview"><span>Ẩn nội dung tin trong thông báo (chỉ hiện người gửi)</span></label>
+    <label class="check"><input type="checkbox" id="hidePreview"><span>Ẩn nội dung tin trong thông báo và xem trước bong bóng</span></label>
     <label class="check"><input type="checkbox" id="muted"><span>Tắt âm báo</span></label>
   </section>
 
   <section>
     <h2>Phím tắt</h2>
-    <label class="field" for="hotkeyCapture">Chụp màn hình nhanh</label>
-    <input type="text" id="hotkeyCapture" class="key" readonly>
-    <label class="field" for="hotkeyExcel">Gửi vùng Excel vừa copy</label>
-    <input type="text" id="hotkeyExcel" class="key" readonly>
     <label class="field" for="hotkeyToggle">Mở / thu khung chat</label>
     <input type="text" id="hotkeyToggle" class="key" readonly>
     <p class="help">Bấm vào ô rồi nhấn tổ hợp phím mới (phải có Ctrl, Alt hoặc Shift). Nhấn Delete để bỏ phím tắt.</p>
@@ -92,7 +88,7 @@
 
   <section>
     <h2>Bong bóng từng nhóm và từng người</h2>
-    <label class="check"><input type="checkbox" id="groupBubbles"><span><b>Nhóm chat vừa @tag bạn</b> – chấm cam @ báo số lần bị tag</span></label>
+    <label class="check"><input type="checkbox" id="groupBubbles"><span><b>Nhóm chat có tin mới</b> – hiện bong bóng cho mọi tin nhóm; chấm cam @ nếu được tag</span></label>
     <label class="check"><input type="checkbox" id="peopleBubbles"><span><b>Người nhắn riêng cho bạn</b> – số đỏ báo số tin mới</span></label>
     <label class="check"><input type="checkbox" id="useAvatars"><span>Hiện <b>ảnh đại diện</b> (lấy từ thông báo Zalo). Không có ảnh thì hiện chữ viết tắt.</span></label>
     <label class="check"><input type="checkbox" id="hideReadBubbles"><span><b>Ẩn bong bóng khi đã đọc.</b> Bỏ tích = đọc xong vẫn giữ bong bóng, chỉ mất số (bong bóng tự ẩn theo thời gian bên dưới).</span></label>
@@ -102,7 +98,7 @@
       <option value="5">5 bong bóng</option>
       <option value="8">8 bong bóng</option>
     </select>
-    <label class="field" for="groupAutoHide">Tự ẩn bong bóng khi không có tag mới sau</label>
+    <label class="field" for="groupAutoHide">Tự ẩn bong bóng khi không có tin mới sau</label>
     <select id="groupAutoHide">
       <option value="30">30 phút</option>
       <option value="60">1 giờ</option>
@@ -184,9 +180,7 @@
       input.value = parts.join('+');
     });
   }
-  recorder($('hotkeyCapture'));
   recorder($('hotkeyToggle'));
-  recorder($('hotkeyExcel'));
 
   // ----- Thư viện hình bong bóng -----
   let choice = { style: 'logo', preset: '' };
@@ -234,9 +228,7 @@
     $('muted').checked = !!s.muted;
     $('pinChat').checked = !!s.pinChat;
     $('autoStart').checked = !!s.autoStart;
-    $('hotkeyCapture').value = s.hotkeyCapture || '';
     $('hotkeyToggle').value = s.hotkeyToggle || '';
-    $('hotkeyExcel').value = s.hotkeyExcel || '';
     $('zaloPcPath').value = s.zaloPcPath || '';
     $('bubbleImagePath').value = s.bubbleImagePath || '';
     $('groupBubbles').checked = s.groupBubbles !== false;
@@ -269,9 +261,7 @@
       muted: $('muted').checked,
       pinChat: $('pinChat').checked,
       autoStart: $('autoStart').checked,
-      hotkeyCapture: $('hotkeyCapture').value,
       hotkeyToggle: $('hotkeyToggle').value,
-      hotkeyExcel: $('hotkeyExcel').value,
       zaloPcPath: $('zaloPcPath').value,
       bubbleStyle: choice.style,
       bubblePreset: choice.preset,
