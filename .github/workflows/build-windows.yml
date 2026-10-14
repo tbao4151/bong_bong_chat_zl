@@ -1,0 +1,46 @@
+name: Test and Build Windows
+
+on:
+  push:
+    branches:
+      - main
+      - feature/secure-android-style-bubbles
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve dependencies (temporary until lockfile is committed)
+        shell: pwsh
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Install locked dependencies
+        shell: pwsh
+        run: npm ci
+      - name: Test security policy and chat inbox
+        shell: pwsh
+        run: npm test
+      - name: Audit dependencies
+        shell: pwsh
+        run: npm audit --audit-level=high
+      - name: Build Windows setup and portable EXE
+        shell: pwsh
+        run: npm run dist
+      - name: Publish unsigned test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZaloBongBong-v2-Windows-unsigned
+          path: |
+            dist/*.exe
+          if-no-files-found: error
