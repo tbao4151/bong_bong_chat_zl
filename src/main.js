@@ -594,14 +594,14 @@ function handleZaloNotification(title, body, nid, icon) {
   const tagged = isTagged(text);
   const prio = isPriority(text);
   if (tagged && (settings.myName || (settings.tagKeywords || []).length)) {
-    mentions.add(title, body, nid);   // luôn ghi lại, kể cả khi đang tắt thông báo
-    pushState();
+    mentions.add(title, body, nid); // transient, not saved to disk
   }
   const parsed = mentions.parse(title, body);
-  if (!parsed.group && !(chatOpen && chatWin.isFocused())) {
-    privates.add(parsed.sender, parsed.text, nid);   // tin nhắn riêng -> bong bóng từng người
-    pushState();
+  // Every incoming notification creates a bubble, not only @mentions.
+  if (!(chatOpen && chatWin.isFocused())) {
+    inbox.add({ group: parsed.group, sender: parsed.sender, text: parsed.text, nid, tagged });
   }
+  pushState();
   let show = false;
   if (settings.notifyMode === 'all') show = true;
   else if (settings.notifyMode === 'tag') show = tagged || prio || (!settings.myName && tagKeys().length === 0);
@@ -701,7 +701,10 @@ function closeMentions() { if (mentionsWin && !mentionsWin.isDestroyed()) mentio
 
 const fromMentions = (e) => mentionsWin && !mentionsWin.isDestroyed() && e.sender === mentionsWin.webContents;
 
-ipcMain.handle('mentions:list', () => ({ items: mentions.list(), hasName: !!settings.myName }));
+ipcMain.handle('mentions:list', (e) => {
+  if (!mentionsWin || e.sender !== mentionsWin.webContents) throw new Error('forbidden');
+  return { items: mentions.list(), hasName: !!settings.myName };
+});
 ipcMain.on('mentions:open', (e, id) => {
   if (!fromMentions(e)) return;
   const m = mentions.markSeen(String(id || ''));
@@ -713,8 +716,8 @@ ipcMain.on('mentions:seen-all', (e) => { if (fromMentions(e)) { mentions.markAll
 ipcMain.on('mentions:clear', (e) => { if (fromMentions(e)) { mentions.clear(); pushState(); } });
 ipcMain.on('mentions:close', (e) => { if (fromMentions(e)) closeMentions(); });
 ipcMain.on('mentions:settings', (e) => { if (fromMentions(e)) { closeMentions(); openSettings(); } });
-ipcMain.on('shell:mentions', () => openMentions());
-ipcMain.on('bubble:mentions', () => openMentions());
+ipcMain.on('shell:mentions', (e) => { if (fromShell(e)) openMentions(); });
+ipcMain.on('bubble:mentions', (e) => { if (e.sender === bubbleWin.webContents) openMentions(); });
 
 /* ---------------- Bong bóng từng nhóm có tag bạn & từng người nhắn riêng ---------------- */
 
@@ -745,7 +748,7 @@ function createStack() {
 function pinnedSet() { return new Set(settings.pinnedBubbles || []); }
 
 function blank(kind, name) {
-  return { key: kind + ':' + name, kind, name, count: 0, total: 0, lastAt: 0, lastNid: '', lastSender: '', lastText: '' };
+  return { key: kind + ':' + name, kind, name, count: 0, total: 0, lastAt: 0, lastNid: '', lastSender: '', lastText: '', tagged: false };
 }
 
 function bubbleList() {
@@ -754,24 +757,11 @@ function bubbleList() {
   const pinned = pinnedSet();
   const map = new Map();
 
-  if (settings.groupBubbles) {
-    mentions.list().forEach((m) => {
-      if (!m.group) return;
-      const key = 'g:' + m.group;
-      let g = map.get(key);
-      if (!g) { g = blank('g', m.group); map.set(key, g); }
-      if (m.at > g.lastAt) { g.lastAt = m.at; g.lastNid = m.nid; g.lastSender = m.sender; g.lastText = m.text; }
-      if (!m.seen) g.count++;
-      g.total++;
-    });
-  }
-  if (settings.peopleBubbles) {
-    privates.list().forEach((p) => {
-      const it = blank('p', p.name);
-      it.count = p.count; it.total = 1; it.lastAt = p.lastAt; it.lastNid = p.lastNid; it.lastText = p.lastText;
-      map.set(it.key, it);
-    });
-  }
+  inbox.list().forEach((item) => {
+    if (item.kind === 'g' && !settings.groupBubbles) return;
+    if (item.kind === 'p' && !settings.peopleBubbles) return;
+    map.set(item.key, item);
+  });
   pinned.forEach((key) => {
     const kind = key.slice(0, 1), name = key.slice(2);
     if ((kind === 'g' && !settings.groupBubbles) || (kind === 'p' && !settings.peopleBubbles)) return;
@@ -812,7 +802,8 @@ function updateStack() {
     groups: stackItems.map((it) => ({
       key: it.key, kind: it.kind, name: it.name, count: it.count, total: it.total, pinned: it.pinned,
       avatar: settings.useAvatars ? icons.get(it.key) : '',
-      sender: it.lastSender, text: it.lastText, at: it.lastAt, fresh: it.count > 0 && now - it.lastAt < 15000
+      sender: it.lastSender, text: settings.hidePreview ? '' : it.lastText,
+      tagged: !!it.tagged, at: it.lastAt, fresh: it.count > 0 && now - it.lastAt < 15000
     }))
   };
   const key = JSON.stringify(payload);
@@ -831,7 +822,8 @@ function openBubble(key) {
   if (chatOpen && openedKey === key) { hideChat(); return; }
   const it = findItem(key);
   const kind = key.slice(0, 1), name = key.slice(2);
-  if (kind === 'g') mentions.markGroupSeen(name); else privates.markSeen(name);
+  inbox.markSeen(key);
+  if (kind === 'g') mentions.markGroupSeen(name);
   pushState();
   openChatAt(it ? it.lastNid : '', name);
   openedKey = key;
@@ -873,7 +865,8 @@ function bubbleMenu(key) {
     { label: (kind === 'g' ? 'Mở nhóm "' : 'Mở chat với "') + name + '"', click: () => openBubble(key) },
     { label: pinned ? 'Bỏ ghim bong bóng' : 'Ghim bong bóng (không tự ẩn)', click: () => togglePinBubble(key) },
     { label: 'Đánh dấu đã đọc', click: () => {
-      if (kind === 'g') mentions.markGroupSeen(name); else privates.markSeen(name);
+      inbox.markSeen(key);
+      if (kind === 'g') mentions.markGroupSeen(name);
       pushState();
     } },
     { label: 'Đóng bong bóng này', click: () => dismissBubble(key) },
@@ -959,7 +952,7 @@ ipcMain.on('capture:done', (e, r) => {
   openEditor(cropped, sf, 'Ảnh chụp màn hình');
 });
 
-ipcMain.on('capture:cancel', () => finishCapture(false));
+ipcMain.on('capture:cancel', (e) => { if (captureWin && e.sender === captureWin.webContents) finishCapture(false); });
 
 function finishCapture() {
   if (!capturing) return;
@@ -1085,7 +1078,7 @@ async function sendExcelRange() {
   openEditor(img, 1, 'Vùng Excel');
 }
 
-ipcMain.on('shell:excel', () => sendExcelRange());
+ipcMain.on('shell:excel', (e) => { if (fromShell(e)) sendExcelRange(); });
 
 /* ---------------- Menu, khay hệ thống, phím tắt ---------------- */
 
