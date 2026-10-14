@@ -1,34 +1,17 @@
 'use strict';
 // Lưu danh sách "Tin nhắc tên tôi" (giữ 7 ngày gần nhất) vào file nhac-ten.json
-const { app } = require('electron');
-const fs = require('fs');
-const path = require('path');
-
+// In-memory @mention history; never saved to plaintext JSON.
 const KEEP_DAYS = 7;
 const MAX_ITEMS = 300;
-let items = null;
-
-function file() { return path.join(app.getPath('userData'), 'nhac-ten.json'); }
+let items = [];
 
 function prune() {
   const limit = Date.now() - KEEP_DAYS * 24 * 3600 * 1000;
   items = items.filter((m) => m.at >= limit).slice(-MAX_ITEMS);
 }
 
-function load() {
-  if (items) return items;
-  try { items = JSON.parse(fs.readFileSync(file(), 'utf8')); if (!Array.isArray(items)) items = []; }
-  catch (e) { items = []; }
-  prune();
-  return items;
-}
-
-function save() {
-  try {
-    fs.mkdirSync(path.dirname(file()), { recursive: true });
-    fs.writeFileSync(file(), JSON.stringify(items), 'utf8');
-  } catch (e) { /* bỏ qua */ }
-}
+function load() { prune(); return items; }
+function save() { /* Intentionally no disk storage */ }
 
 // Zalo thường gửi thông báo nhóm dạng: tiêu đề = tên nhóm, nội dung = "Người gửi: tin nhắn"
 function parse(title, body) {
