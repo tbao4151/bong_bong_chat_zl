@@ -1,4 +1,4 @@
-name: Test and Build Windows
+name: Test and Package Windows
 
 on:
   push:
@@ -34,13 +34,13 @@ jobs:
       - name: Audit dependencies
         shell: pwsh
         run: npm audit --audit-level=moderate
-      - name: Build Windows setup and portable EXE
+      - name: Package portable Windows EXE (no installer)
         shell: pwsh
         run: npm run dist
-      - name: Publish unsigned test build
+      - name: Publish portable application folder
         uses: actions/upload-artifact@v4
         with:
-          name: ZaloBongBong-v2-security-review-unsigned
+          name: ZaloBongBong-v2.1-portable-unsigned
           path: |
-            dist/*.exe
+            dist/ZaloBongBong-win32-x64/**
           if-no-files-found: error
